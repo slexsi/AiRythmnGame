@@ -1,20 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rhythm AI FNF Demo</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <title>AI Rhythm Game</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
 </head>
 <body>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <h1>AI Rhythm Game Demo</h1>
 
-  <audio id="song" src="assets/song.mp3"></audio>
+  <input type="file" id="songInput" accept=".mp3">
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
 
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
-  <script src="ai.js"></script>
-  <script src="game.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
