@@ -1,0 +1,12 @@
+body {
+  margin: 0;
+  background: #111;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+canvas {
+  border: 3px solid #fff;
+  background: url("assets/bg.png") center/cover;
+}
