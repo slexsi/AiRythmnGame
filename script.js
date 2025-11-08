@@ -18,6 +18,7 @@ aiCanvas.style.marginTop = "20px";
 document.body.insertBefore(aiCanvas, canvas);
 const aiCtx = aiCanvas.getContext("2d");
 let rmsHistoryVisual = [];
+let aiNextLane = null; // <<< AI lane highlight
 
 const playBtn = document.createElement("button");
 playBtn.textContent = "▶️ Play Song";
@@ -78,11 +79,11 @@ playBtn.addEventListener("click", async () => {
 
         const beatInterval = 60 / bpm;
 
-        // spawn note
+        // spawn note & highlight AI lane
         if (rms > 0.05 && now - lastNoteTime > beatInterval * 0.9) {
           lastNoteTime = now;
-          const laneIndex = Math.floor(Math.random() * lanes.length);
-          notes.push({ lane: laneIndex, y: 0, hit: false });
+          aiNextLane = Math.floor(Math.random() * lanes.length);
+          notes.push({ lane: aiNextLane, y: 0, hit: false });
         }
 
         // --- AI visualization ---
@@ -113,7 +114,12 @@ function gameLoop() {
 
   // draw lanes
   lanes.forEach((key, i) => {
-    ctx.fillStyle = keys[key] ? "#0f0" : "#333";
+    // highlight lane AI just chose
+    if (i === aiNextLane) {
+      ctx.fillStyle = "#ff0"; // AI choice highlight
+    } else {
+      ctx.fillStyle = keys[key] ? "#0f0" : "#333";
+    }
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
@@ -160,6 +166,7 @@ function resetGame() {
   bpm = 120;
   rmsHistory = [];
   rmsHistoryVisual = [];
+  aiNextLane = null;
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
