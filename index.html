@@ -4,15 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Rhythm Demo</title>
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { text-align: center; background: #111; color: white; }
+    canvas { background: #222; border-radius: 12px; margin-top: 20px; }
+  </style>
 </head>
 <body>
-  <h1>AI Rhythm Demo</h1>
-  <p>Press Play to start analyzing beats 👇</p>
-  <canvas id="gameCanvas" width="800" height="400"></canvas>
+  <h1>AI Rhythm Game Demo</h1>
+  <canvas id="gameCanvas" width="600" height="400"></canvas>
 
-  <!-- Meyda library -->
+  <!-- Meyda first -->
   <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
+  <!-- Then your game script -->
   <script src="script.js"></script>
 </body>
 </html>
