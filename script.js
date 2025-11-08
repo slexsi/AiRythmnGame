@@ -9,7 +9,7 @@ const hitWindow = 40;
 let notes = [];
 let score = 0;
 
-// AI visualization
+// AI visualization canvas
 const aiCanvas = document.createElement("canvas");
 aiCanvas.width = 600;
 aiCanvas.height = 100;
@@ -17,22 +17,31 @@ aiCanvas.style.background = "#111";
 aiCanvas.style.marginTop = "20px";
 document.body.insertBefore(aiCanvas, canvas);
 const aiCtx = aiCanvas.getContext("2d");
-let rmsHistoryVisual = [];
+let aiHistory = [];
 
+// Buttons
 const playBtn = document.createElement("button");
 playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas.nextSibling);
-
 const songUpload = document.getElementById("songUpload");
 
+// Audio
 const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
-let bpm = 120;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
-let lastNoteTime = 0;
+
+// --- Mock Neural Network ---
+// A simple demo network: input last 20 RMS values, output beat probability
+let nnModel = {
+  predict: (input) => {
+    // just a fake function for demo: higher RMS -> higher beat probability
+    const avg = input.reduce((a, b) => a + b, 0) / input.length;
+    return Math.min(avg * 20, 1); // 0 -> 1
+  },
+};
 
 // --- File upload ---
 songUpload.addEventListener("change", (e) => {
@@ -54,6 +63,8 @@ playBtn.addEventListener("click", async () => {
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
+    let lastNoteTime = 0;
+
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
       source: sourceNode,
@@ -64,32 +75,27 @@ playBtn.addEventListener("click", async () => {
         const rms = features.rms;
         const now = audioContext.currentTime;
 
-        // --- Store RMS for beat detection ---
+        // --- store RMS ---
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        if (rmsHistory.length === historyLength) {
-          const threshold = 0.08;
-          const peaks = rmsHistory.filter(v => v > threshold).length;
-          const seconds = (historyLength * 1024) / audioContext.sampleRate;
-          bpm = Math.round((peaks / seconds) * 60);
-        }
+        // --- neural network decision ---
+        const inputWindow = rmsHistory.slice(-20);
+        const beatProb = nnModel.predict(inputWindow);
 
-        const beatInterval = 60 / bpm;
-
-        // spawn note
+        // spawn note if NN predicts
         let noteSpawned = false;
-        if (rms > 0.05 && now - lastNoteTime > beatInterval * 0.9) {
+        if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ lane: laneIndex, y: 0, hit: false });
           noteSpawned = true;
         }
 
-        // --- AI visualization: RMS graph + note markers ---
-        rmsHistoryVisual.push({ rms: rms, noteSpawned: noteSpawned });
-        if (rmsHistoryVisual.length > aiCanvas.width) rmsHistoryVisual.shift();
-        drawAIVisualization();
+        // --- AI visualization ---
+        aiHistory.push(beatProb);
+        if (aiHistory.length > aiCanvas.width) aiHistory.shift();
+        drawAIVisualization(noteSpawned);
       },
     });
 
@@ -141,41 +147,20 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-// --- Draw AI Visualization ---
-function drawAIVisualization() {
+// --- AI Visualization ---
+function drawAIVisualization(noteSpawned) {
   aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
+  aiHistory.forEach((val, i) => {
+    const h = val * aiCanvas.height;
+    aiCtx.fillStyle = "#08f";
+    aiCtx.fillRect(i, aiCanvas.height - h, 1, h);
 
-  // Draw RMS graph
-  aiCtx.strokeStyle = "#0f8";
-  aiCtx.lineWidth = 2;
-  aiCtx.beginPath();
-  rmsHistoryVisual.forEach((item, i) => {
-    const y = aiCanvas.height - item.rms * aiCanvas.height * 5; // scale RMS
-    if (i === 0) aiCtx.moveTo(i, y);
-    else aiCtx.lineTo(i, y);
-  });
-  aiCtx.stroke();
-
-  // Draw vertical lines for note spawns
-  rmsHistoryVisual.forEach((item, i) => {
-    if (item.noteSpawned) {
-      aiCtx.strokeStyle = "#ff0";
-      aiCtx.lineWidth = 1;
-      aiCtx.beginPath();
-      aiCtx.moveTo(i, 0);
-      aiCtx.lineTo(i, aiCanvas.height);
-      aiCtx.stroke();
+    // mark when note spawned
+    if (val > 0.5 && noteSpawned) {
+      aiCtx.fillStyle = "#0f8";
+      aiCtx.fillRect(i, 0, 1, aiCanvas.height);
     }
   });
-
-  // Draw threshold line (optional)
-  const thresholdY = aiCanvas.height - (0.05 * aiCanvas.height * 5);
-  aiCtx.strokeStyle = "#f00";
-  aiCtx.lineWidth = 1;
-  aiCtx.beginPath();
-  aiCtx.moveTo(0, thresholdY);
-  aiCtx.lineTo(aiCanvas.width, thresholdY);
-  aiCtx.stroke();
 }
 
 // --- Reset ---
@@ -185,9 +170,8 @@ function resetGame() {
 
   notes = [];
   score = 0;
-  bpm = 120;
   rmsHistory = [];
-  rmsHistoryVisual = [];
+  aiHistory = [];
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
