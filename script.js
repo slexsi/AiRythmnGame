@@ -118,7 +118,7 @@ playBtn.addEventListener("click", async () => {
 // --- Key input ---
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
-  if (!keys[key]) keys[key] = true; // track first press
+  keys[key] = true;
   handleHit(key);
 });
 
@@ -130,7 +130,7 @@ window.addEventListener("keyup", (e) => {
   notes.forEach((n) => {
     if (n.lane === lanes.indexOf(key) && n.type === "hold" && n.holding) {
       n.holding = false; // stop holding
-      score += Math.round(n.length / 5); // final reward
+      score += Math.round(n.length / 5); // final reward for hold
       scoreEl.textContent = "Score: " + score;
     }
   });
@@ -177,8 +177,9 @@ function gameLoop() {
     ctx.fillStyle = n.type === "hold" ? "orange" : "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, n.length);
 
-    // continuous scoring for hold notes while holding
-    if (n.type === "hold" && n.holding) {
+    // hold logic: continuously award points if key pressed
+    if (n.type === "hold" && keys[lanes[n.lane]]) {
+      n.holding = true;
       score += 1; // points per frame
       scoreEl.textContent = "Score: " + score;
     }
