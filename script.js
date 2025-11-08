@@ -21,7 +21,7 @@ playBtn.addEventListener("click", async () => {
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   await audioContext.resume();
 
-  audioElement.load(); // force audio load
+  audioElement.load(); // force load
 
   audioElement.addEventListener("canplaythrough", () => {
     console.log("Audio ready, starting analyzer...");
@@ -36,7 +36,8 @@ playBtn.addEventListener("click", async () => {
         bufferSize: 1024,
         featureExtractors: ["spectralFlux"],
         callback: (features) => {
-          if (features && features.spectralFlux > 0.005) { // adjust threshold
+          console.log("SpectralFlux:", features?.spectralFlux); // debug log
+          if (features && features.spectralFlux > 0.001) { // adjust as needed
             const laneIndex = Math.floor(Math.random() * lanes.length);
             notes.push({ lane: laneIndex, y: 0 });
           }
@@ -49,11 +50,11 @@ playBtn.addEventListener("click", async () => {
       playBtn.textContent = "Playing...";
       playBtn.style.opacity = "0.5";
 
-      // fallback auto-spawn every 0.5s (optional, remove if you want pure Meyda)
-      // setInterval(() => {
-      //   const laneIndex = Math.floor(Math.random() * lanes.length);
-      //   notes.push({ lane: laneIndex, y: 0 });
-      // }, 500);
+      // === Auto spawn fallback for testing ===
+      setInterval(() => {
+        const laneIndex = Math.floor(Math.random() * lanes.length);
+        notes.push({ lane: laneIndex, y: 0 });
+      }, 500);
 
     } catch (err) {
       console.error("Analyzer setup failed:", err);
