@@ -58,13 +58,16 @@
   <!-- Audio Upload -->
   <input type="file" id="songUpload" accept="audio/*">
 
+  <!-- Optional: Loading Status -->
+  <div id="loadingStatus" style="color:#0f8; margin-top:10px;"></div>
+
   <!-- Magenta.js UMD Build (defines global "mm") -->
   <script src="https://cdn.jsdelivr.net/npm/@magenta/music@2.1.5/dist/magenta.js"></script>
 
-  <!-- Meyda Library (Optional: for audio features like RMS) -->
+  <!-- Meyda Library for audio features like RMS -->
   <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
 
-  <!-- Game Script -->
+  <!-- Your Game Script (runs after Magenta and Meyda) -->
   <script src="script.js"></script>
 </body>
 </html>
