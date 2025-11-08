@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Rhythm Demo</title>
+  <title>AI Rhythm Demo 🎵</title>
   <style>
     body {
       text-align: center;
@@ -19,9 +19,8 @@
       margin-left: auto;
       margin-right: auto;
     }
-    #score {
-      margin-top: 10px;
-      font-size: 20px;
+    #rmsCanvas {
+      height: 100px;
     }
     button {
       margin-top: 20px;
@@ -35,21 +34,32 @@
     button:disabled {
       opacity: 0.6;
     }
+    #score {
+      margin-top: 10px;
+      font-size: 20px;
+    }
   </style>
 </head>
 <body>
   <h1>AI Rhythm Demo 🎵</h1>
 
+  <!-- RMS visualization canvas -->
   <canvas id="rmsCanvas" width="600" height="100"></canvas>
+
+  <!-- Main game canvas -->
   <canvas id="gameCanvas" width="600" height="400"></canvas>
+
+  <!-- Score display -->
   <div id="score">Score: 0</div>
+
+  <!-- Audio upload -->
   <input type="file" id="songUpload" accept="audio/*">
-  <button id="playBtn">▶️ Play Song</button>
 
   <!-- Libraries -->
   <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@2.1.6/es6/core.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@2.1.6/es6/music_rnn.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music/dist/magenta-music.min.js"></script>
+
+  <!-- Game logic -->
   <script src="script.js"></script>
 </body>
 </html>
