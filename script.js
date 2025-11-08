@@ -51,6 +51,7 @@
     let notes = [];
     let score = 0;
 
+    // --- Play button ---
     const playBtn = document.createElement("button");
     playBtn.textContent = "▶️ Play Song";
     document.body.insertBefore(playBtn, canvas.nextSibling);
@@ -81,12 +82,13 @@
       scoreEl.textContent = "Score: 0";
       playBtn.disabled = false;
       playBtn.textContent = "▶️ Play Song";
+      playBtn.style.opacity = "1"; // reset visibility
     });
 
     // --- Play button logic ---
     playBtn.addEventListener("click", async () => {
-      playBtn.disabled = true;
-      playBtn.textContent = "Loading...";
+      playBtn.disabled = false; // keep clickable
+      playBtn.textContent = "Playing...";
 
       try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -131,9 +133,6 @@
 
         analyzer.start();
         await audioElement.play();
-        playBtn.textContent = "Playing...";
-        playBtn.style.opacity = "0.5";
-
         gameLoop();
       } catch (err) {
         console.error("Error:", err);
@@ -145,7 +144,7 @@
     // --- Key input ---
     window.addEventListener("keydown", (e) => {
       const key = e.key.toLowerCase();
-      if (!keys[key]) keys[key] = true;
+      keys[key] = true;
     });
 
     window.addEventListener("keyup", (e) => {
@@ -184,13 +183,10 @@
 
         // hold note
         if (n.type === "hold") {
-          // start scoring if key pressed in hit window
           if (keyPressed && !n.hit && Math.abs(n.y - hitY) < hitWindow) {
             n.holding = true;
-            n.hit = true; // mark as hit immediately
+            n.hit = true;
           }
-
-          // continuous scoring while holding
           if (n.holding) {
             score += 1;
             scoreEl.textContent = "Score: " + score;
@@ -200,12 +196,8 @@
 
       // remove notes
       notes = notes.filter((n) => {
-        // Normal notes: remove if hit or off screen
         if (n.type === "normal" && (n.hit || n.y > canvas.height)) return false;
-
-        // Hold notes: remove if hit and passed the hit line
         if (n.type === "hold" && n.hit && n.y > hitY + n.length) return false;
-
         return true;
       });
 
