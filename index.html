@@ -5,17 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Rhythm Demo</title>
   <style>
-    body { text-align: center; background: #111; color: white; }
-    canvas { background: #222; border-radius: 12px; margin-top: 20px; }
+    body {
+      text-align: center;
+      background: #111;
+      color: white;
+      font-family: sans-serif;
+    }
+    canvas {
+      background: #222;
+      border-radius: 12px;
+      margin-top: 20px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      background: #0f8;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+    }
   </style>
 </head>
 <body>
-  <h1>AI Rhythm Game Demo</h1>
+  <h1>AI Rhythm Demo 🎵</h1>
   <canvas id="gameCanvas" width="600" height="400"></canvas>
 
-  <!-- Meyda first -->
+  <!-- Meyda library -->
   <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
-  <!-- Then your game script -->
+  <!-- Game logic -->
   <script src="script.js"></script>
 </body>
 </html>
