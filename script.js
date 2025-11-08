@@ -2,14 +2,14 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 let notes = [];
-let beatMap = [];
 let audioContext, sourceNode, analyzer;
 
+// button setup
 const playBtn = document.createElement("button");
 playBtn.textContent = "▶️ Play Song";
-document.body.insertBefore(playBtn, canvas);
+document.body.insertBefore(playBtn, canvas.nextSibling);
 
-// make sure the file is literally named song.mp3 and in the same folder
+// make sure song.mp3 is in the same folder
 const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
@@ -18,49 +18,48 @@ playBtn.addEventListener("click", async () => {
   playBtn.textContent = "Loading...";
 
   try {
-    // 1️⃣ create + resume audio context
+    // audio context
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     await audioContext.resume();
 
-    // 2️⃣ connect source
+    // connect source
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
-    // 3️⃣ start analyzer immediately
+    // Meyda analyzer
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
       source: sourceNode,
       bufferSize: 1024,
-      featureExtractors: ["spectralFlux"],
+      featureExtractors: ["rms"], // simpler feature, works everywhere
       callback: (features) => {
-        if (
-          features &&
-          typeof features.spectralFlux === "number" &&
-          !isNaN(features.spectralFlux) &&
-          features.spectralFlux > 0.02
-        ) {
-          beatMap.push(audioContext.currentTime);
+        if (features && features.rms > 0.05) {
           notes.push({ x: Math.random() * (canvas.width - 30), y: 0 });
-          console.log("Beat detected:", features.spectralFlux.toFixed(3));
+          console.log("Beat:", features.rms.toFixed(3));
         }
       },
     });
 
     analyzer.start();
 
-    // 4️⃣ wait just a tick then play (this ensures it’s connected)
-    setTimeout(() => {
-      console.log("Playing audio...");
-      audioElement.play().catch(err => console.error("Audio play blocked:", err));
-      playBtn.textContent = "Playing...";
-    }, 500);
-
+    // play audio right after click
+    await audioElement.play();
+    console.log("Audio started.");
+    playBtn.textContent = "Playing...";
     gameLoop();
   } catch (err) {
-    console.error("Error setting up audio:", err);
+    console.error("Error:", err);
     playBtn.disabled = false;
     playBtn.textContent = "▶️ Try Again";
   }
 });
 
-function gameLoop()
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "red";
+  notes.forEach((n) => {
+    n.y += 5;
+    ctx.fillRect(n.x, n.y, 30, 30);
+  });
+  requestAnimationFrame(gameLoop);
+}
