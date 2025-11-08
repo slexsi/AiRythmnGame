@@ -14,11 +14,35 @@ const playBtn = document.createElement("button");
 playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas.nextSibling);
 
+// file input for uploading a song
+const songUpload = document.getElementById("songUpload");
+
+// audio element
 const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
 
+// --- File upload listener ---
+songUpload.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const url = URL.createObjectURL(file);
+  audioElement.src = url;
+
+  // reset game state
+  if (analyzer) analyzer.stop();
+  if (audioContext) audioContext.close();
+
+  notes = [];
+  score = 0;
+  scoreEl.textContent = "Score: 0";
+  playBtn.disabled = false;
+  playBtn.textContent = "▶️ Play Song";
+});
+
+// --- Play button logic ---
 playBtn.addEventListener("click", async () => {
   playBtn.disabled = true;
   playBtn.textContent = "Loading...";
@@ -65,7 +89,7 @@ playBtn.addEventListener("click", async () => {
   }
 });
 
-// key input
+// --- Key input ---
 const keys = {};
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
@@ -76,6 +100,7 @@ window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
+// --- Hit detection ---
 function handleHit(key) {
   const laneIndex = lanes.indexOf(key);
   if (laneIndex === -1) return;
@@ -91,7 +116,7 @@ function handleHit(key) {
   }
 }
 
-// main game loop
+// --- Main game loop ---
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
