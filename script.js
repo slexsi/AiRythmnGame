@@ -74,13 +74,11 @@ playBtn.addEventListener("click", async () => {
         const now = audioContext.currentTime;
         const beatInterval = 60 / bpm;
 
+        // spawn normal notes only
         if (features.rms > 0.05 && now - lastBeat > beatInterval * 0.9) {
           lastBeat = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
-          const type = Math.random() < 0.2 ? "hold" : "normal";
-          const length = type === "hold" ? 80 : 30;
-
-          notes.push({ lane: laneIndex, y: 0, type, length, holding: false, hit: false });
+          notes.push({ lane: laneIndex, y: 0, hit: false });
         }
       },
     });
@@ -124,37 +122,20 @@ function gameLoop() {
   // draw notes & scoring
   notes.forEach((n) => {
     n.y += 5;
-    ctx.fillStyle = n.type === "hold" ? "orange" : "red";
-    ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, n.length);
+    ctx.fillStyle = "red";
+    ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
     const keyPressed = keys[lanes[n.lane]];
 
-    // normal note hit
-    if (n.type === "normal" && Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
+    if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
       score += 100;
       scoreEl.textContent = "Score: " + score;
       n.hit = true;
     }
-
-    // hold note
-    if (n.type === "hold") {
-      if (keyPressed && !n.hit && Math.abs(n.y - hitY) < hitWindow) {
-        n.holding = true;
-        n.hit = true;
-      }
-      if (n.holding) {
-        score += 1;
-        scoreEl.textContent = "Score: " + score;
-      }
-    }
   });
 
-  // remove notes that are done
-  notes = notes.filter((n) => {
-    if (n.type === "normal" && (n.hit || n.y > canvas.height)) return false;
-    if (n.type === "hold" && n.hit && n.y > hitY + n.length) return false;
-    return true;
-  });
+  // remove notes that are hit or off-screen
+  notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
   requestAnimationFrame(gameLoop);
 }
