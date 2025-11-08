@@ -1,10 +1,124 @@
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+
+const lanes = ["a", "s", "k", "l"];
+const laneWidth = canvas.width / lanes.length;
+const hitY = canvas.height - 60;
+const hitWindow = 40;
+let notes = [];
+let score = 0;
+
+// button setup
+const playBtn = document.createElement("button");
+playBtn.textContent = "▶️ Play Song";
+document.body.insertBefore(playBtn, canvas.nextSibling);
+
+// file input for uploading a song
+const songUpload = document.getElementById("songUpload");
+
+// audio element
+const audioElement = new Audio("song.mp3");
+audioElement.crossOrigin = "anonymous";
+
+let audioContext, sourceNode, analyzer;
+let bpm = 120; // default BPM
+let rmsHistory = [];
+const historyLength = 1024 * 30; // ~30 buffers for BPM estimation
+
+// --- File upload listener ---
+songUpload.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const url = URL.createObjectURL(file);
+  audioElement.src = url;
+
+  // reset game state
+  if (analyzer) analyzer.stop();
+  if (audioContext) audioContext.close();
+
+  notes = [];
+  score = 0;
+  bpm = 120;
+  rmsHistory = [];
+  scoreEl.textContent = "Score: 0";
+  playBtn.disabled = false;
+  playBtn.textContent = "▶️ Play Song";
+});
+
+// --- Play button logic ---
+playBtn.addEventListener("click", async () => {
+  playBtn.disabled = true;
+  playBtn.textContent = "Loading...";
+
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await audioContext.resume();
+
+    sourceNode = audioContext.createMediaElementSource(audioElement);
+    sourceNode.connect(audioContext.destination);
+
+    let lastBeat = 0;
+
+    analyzer = Meyda.createMeydaAnalyzer({
+      audioContext,
+      source: sourceNode,
+      bufferSize: 1024,
+      featureExtractors: ["rms"],
+      callback: (features) => {
+        if (!features) return;
+
+        // store RMS for BPM estimation
+        rmsHistory.push(features.rms);
+        if (rmsHistory.length > historyLength) rmsHistory.shift();
+
+        // simple BPM estimation every historyLength frames
+        if (rmsHistory.length === historyLength) {
+          const threshold = 0.08;
+          const peaks = rmsHistory.filter(v => v > threshold).length;
+          const seconds = (historyLength * 1024) / audioContext.sampleRate;
+          bpm = Math.round((peaks / seconds) * 60);
+        }
+
+        // spawn notes
+        const now = audioContext.currentTime;
+        const beatInterval = 60 / bpm;
+
+        if (features.rms > 0.05 && now - lastBeat > beatInterval * 0.9) {
+          lastBeat = now;
+          const laneIndex = Math.floor(Math.random() * lanes.length);
+
+          // randomly create hold notes (20% chance)
+          const type = Math.random() < 0.2 ? "hold" : "normal";
+          const length = type === "hold" ? 80 : 30;
+
+          notes.push({ lane: laneIndex, y: 0, type, length, holding: false });
+          console.log("Beat! Lane:", lanes[laneIndex], "Type:", type, "RMS:", features.rms.toFixed(3));
+        }
+      },
+    });
+
+    analyzer.start();
+    await audioElement.play();
+    playBtn.textContent = "Playing...";
+    playBtn.style.opacity = "0.5";
+
+    gameLoop();
+  } catch (err) {
+    console.error("Error:", err);
+    playBtn.disabled = false;
+    playBtn.textContent = "▶️ Try Again";
+  }
+});
+
 // --- Key input ---
+const keys = {};
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
   if (!keys[key]) keys[key] = true; // track first press
   handleHit(key);
 });
-
 window.addEventListener("keyup", (e) => {
   const key = e.key.toLowerCase();
   keys[key] = false;
@@ -36,7 +150,7 @@ function handleHit(key) {
         break;
       } else if (note.type === "hold" && Math.abs(note.y - hitY) < hitWindow) {
         note.holding = true; // start tracking hold
-        note.holdStartY = note.y; // store starting Y for continuous scoring
+        note.holdStartY = note.y; // optional for visual fill
         break;
       }
     }
