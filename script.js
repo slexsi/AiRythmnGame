@@ -10,40 +10,49 @@ const playBtn = document.createElement("button");
 playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas);
 
-// create audio element
+// create audio element (make sure you have song.mp3 in your repo)
 const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
 playBtn.addEventListener("click", async () => {
   playBtn.disabled = true;
-  playBtn.textContent = "Playing...";
+  playBtn.textContent = "Loading...";
 
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   sourceNode = audioContext.createMediaElementSource(audioElement);
-
-  analyzer = Meyda.createMeydaAnalyzer({
-    audioContext: audioContext,
-    source: sourceNode,
-    bufferSize: 512,
-    featureExtractors: ["spectralFlux"],
-    callback: (features) => {
-      try {
-        if (features.spectralFlux > 0.05) {
-          beatMap.push(audioContext.currentTime);
-          notes.push({ x: Math.random() * (canvas.width - 30), y: 0 });
-        }
-      } catch (e) {
-        console.warn("Meyda skipped a frame:", e);
-      }
-    }
-  });
-
   sourceNode.connect(audioContext.destination);
 
-  await audioContext.resume();
-  analyzer.start();
-  audioElement.play();
-  gameLoop();
+  await audioContext.resume(); // unlock audio on user click
+
+  // wait until the song can play
+  audioElement.addEventListener("canplay", () => {
+    console.log("Audio ready, starting analyzer...");
+
+    analyzer = Meyda.createMeydaAnalyzer({
+      audioContext: audioContext,
+      source: sourceNode,
+      bufferSize: 512,
+      featureExtractors: ["spectralFlux"],
+      callback: (features) => {
+        try {
+          if (features.spectralFlux > 0.02) {
+            beatMap.push(audioContext.currentTime);
+            notes.push({ x: Math.random() * (canvas.width - 30), y: 0 });
+          }
+        } catch (e) {
+          console.warn("Meyda skipped a frame:", e);
+        }
+      },
+    });
+
+    analyzer.start();
+    audioElement.play();
+    gameLoop();
+
+    playBtn.textContent = "Playing...";
+  });
+
+  audioElement.load();
 });
 
 function gameLoop() {
