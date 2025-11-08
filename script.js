@@ -25,6 +25,12 @@ playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas.nextSibling);
 const songUpload = document.getElementById("songUpload");
 
+// Optional loading status
+const loadingStatus = document.createElement("div");
+loadingStatus.style.color = "#0f8";
+loadingStatus.style.marginTop = "10px";
+document.body.insertBefore(loadingStatus, playBtn.nextSibling);
+
 // Audio
 const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
@@ -36,11 +42,20 @@ const historyLength = 1024 * 30;
 // --- Magenta RNN Setup ---
 let rnnLoaded = false;
 let rnnModel;
+let rnnSequence = []; // store generated notes
+
 async function loadRNN() {
-  // load pre-trained drum RNN
+  loadingStatus.textContent = "Loading RNN model...";
   rnnModel = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/drum_kit_rnn');
-  await rnnModel.initialize();
-  rnnLoaded = true;
+  try {
+    await rnnModel.initialize();
+    rnnLoaded = true;
+    loadingStatus.textContent = "RNN Model Ready!";
+    console.log("RNN model loaded!");
+  } catch (err) {
+    console.error("Failed to load RNN:", err);
+    loadingStatus.textContent = "Failed to load RNN model";
+  }
 }
 loadRNN();
 
@@ -60,7 +75,7 @@ playBtn.addEventListener("click", async () => {
   }
 
   resetGame();
-  playBtn.textContent = "Loading...";
+  playBtn.textContent = "Loading Audio...";
 
   try {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -70,7 +85,6 @@ playBtn.addEventListener("click", async () => {
     sourceNode.connect(audioContext.destination);
 
     let lastNoteTime = 0;
-    let rnnSequence = []; // keep track of notes generated
 
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
@@ -88,28 +102,33 @@ playBtn.addEventListener("click", async () => {
 
         // --- Magenta RNN decision ---
         let noteSpawned = false;
-        if (rnnLoaded && now - lastNoteTime > 0.2) {
+        if (now - lastNoteTime > 0.2) {
           lastNoteTime = now;
 
-          // generate next step based on previous sequence
-          const seed = rnnSequence.length > 0 ? [rnnSequence[rnnSequence.length - 1]] : [{quantizedStartStep:0,pitch:36,duration:1}];
-          const rnnOut = await rnnModel.continueSequence(seed, 1, 1.0);
-          const newNote = rnnOut.notes[0];
+          // use last generated note or default seed
+          const seed = rnnSequence.length > 0 
+            ? [rnnSequence[rnnSequence.length - 1]] 
+            : [{quantizedStartStep:0,pitch:36,duration:1}];
 
-          if (newNote) {
-            const laneIndex = Math.floor(Math.random() * lanes.length); // map pitch to lane if desired
-            notes.push({ lane: laneIndex, y: 0, hit: false });
-            rnnSequence.push(newNote);
-            noteSpawned = true;
+          try {
+            const rnnOut = await rnnModel.continueSequence(seed, 1, 1.0);
+            const newNote = rnnOut.notes[0];
+            if (newNote) {
+              const laneIndex = Math.floor(Math.random() * lanes.length); // map pitch to lane if desired
+              notes.push({ lane: laneIndex, y: 0, hit: false });
+              rnnSequence.push(newNote);
+              noteSpawned = true;
+            }
+          } catch(err) {
+            console.error("RNN generation failed:", err);
           }
         }
 
         // --- AI visualization ---
-        const beatProb = rms; // for visualization, still use RMS
-        aiHistory.push(beatProb);
+        aiHistory.push(rms); // can still visualize RMS
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
         drawAIVisualization(noteSpawned);
-      },
+      }
     });
 
     analyzer.start();
@@ -185,6 +204,7 @@ function resetGame() {
   score = 0;
   rmsHistory = [];
   aiHistory = [];
+  rnnSequence = [];
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
