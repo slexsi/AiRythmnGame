@@ -34,7 +34,7 @@ let audioContext, sourceNode, analyzer;
 // --- Load DrumKitRNN model ---
 let drumModel;
 (async () => {
-  drumModel = new mm.DrumKitRNN('drum_kit_rnn.mag');
+  drumModel = new mm.DrumKitRNN('./drum_kit_rnn.mag'); // make sure path is correct
   await drumModel.initialize();
   console.log("DrumKitRNN loaded");
 })();
@@ -63,6 +63,16 @@ playBtn.addEventListener("click", async ()=>{
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
+    // --- Small seed sequence so model generates notes ---
+    const seedSequence = {
+      notes: [{ pitch: 36, startStep: 0, endStep: 1 }], // Kick drum
+      totalQuantizedSteps: 4,
+      quantizationInfo: { stepsPerQuarter: 4 }
+    };
+
+    let lastGenerationTime = 0;
+    const generationInterval = 0.3; // generate notes every 0.3s
+
     // --- Meyda Analyzer ---
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
@@ -70,19 +80,21 @@ playBtn.addEventListener("click", async ()=>{
       bufferSize: 1024,
       featureExtractors: ["rms"],
       callback: async (features) => {
-        if(!features) return;
+        if(!features || !drumModel) return;
         const rms = features.rms;
         rmsHistory.push(rms);
         if(rmsHistory.length > rmsHistoryLength) rmsHistory.shift();
 
-        // --- AI / Magenta logic ---
-        const rmsAvg = rmsHistory.reduce((a,b)=>a+b,0)/rmsHistory.length;
+        const now = audioContext.currentTime;
         let noteSpawned = false;
 
-        if(drumModel && rmsAvg > 0.05){ // threshold can be tuned
+        // --- Throttle generation ---
+        if(rms > 0.01 && now - lastGenerationTime > generationInterval){ 
+          lastGenerationTime = now;
+
           const drumSeq = await drumModel.generate({
-            seedDrumSequence: { notes: [] },
-            steps: 32
+            seedDrumSequence: seedSequence,
+            steps: 16 // generate a small sequence
           });
 
           if(drumSeq.notes.length > 0){
@@ -97,7 +109,6 @@ playBtn.addEventListener("click", async ()=>{
         aiHistory.push(noteSpawned ? 1 : 0);
         if(aiHistory.length > aiCanvas.width) aiHistory.shift();
         drawAIVisualization();
-
       }
     });
 
