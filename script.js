@@ -80,10 +80,7 @@ playBtn.addEventListener("click", async () => {
         if (rms > 0.05 && now - lastNoteTime > beatInterval * 0.9) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
-
-          // calculate speed so note reaches hit line in one beat
-          const speed = hitY / beatInterval;
-          notes.push({ lane: laneIndex, y: 0, hit: false, speed });
+          notes.push({ lane: laneIndex, y: 0, hit: false });
         }
       },
     });
@@ -123,7 +120,7 @@ function gameLoop() {
 
   // draw notes & scoring
   notes.forEach((n) => {
-    n.y += n.speed || 5; // use tempo-synced speed if available
+    n.y += 5;
     ctx.fillStyle = "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
