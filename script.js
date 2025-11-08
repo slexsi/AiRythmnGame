@@ -22,22 +22,19 @@ const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
-let bpm = 120; // default BPM
+let bpm = 120;
 let rmsHistory = [];
-const historyLength = 1024 * 30; // ~30 buffers for BPM estimation
+const historyLength = 1024 * 30;
 
-// track currently pressed keys
-const keys = {};
+const keys = {}; // track pressed keys
 
 // --- File upload listener ---
 songUpload.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
-  const url = URL.createObjectURL(file);
-  audioElement.src = url;
+  audioElement.src = URL.createObjectURL(file);
 
-  // reset game state
   if (analyzer) analyzer.stop();
   if (audioContext) audioContext.close();
 
@@ -75,7 +72,6 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(features.rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // simple BPM estimation
         if (rmsHistory.length === historyLength) {
           const threshold = 0.08;
           const peaks = rmsHistory.filter(v => v > threshold).length;
@@ -91,7 +87,8 @@ playBtn.addEventListener("click", async () => {
           const laneIndex = Math.floor(Math.random() * lanes.length);
           const type = Math.random() < 0.2 ? "hold" : "normal";
           const length = type === "hold" ? 80 : 30;
-          notes.push({ lane: laneIndex, y: 0, type, length, holding: false });
+
+          notes.push({ lane: laneIndex, y: 0, type, length, holding: false, hit: false });
           console.log("Beat! Lane:", lanes[laneIndex], "Type:", type, "RMS:", features.rms.toFixed(3));
         }
       },
@@ -113,7 +110,7 @@ playBtn.addEventListener("click", async () => {
 // --- Key input ---
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
-  if (!keys[key]) keys[key] = true; // track first press
+  if (!keys[key]) keys[key] = true;
 });
 
 window.addEventListener("keyup", (e) => {
@@ -123,7 +120,8 @@ window.addEventListener("keyup", (e) => {
   // release hold notes
   notes.forEach((n) => {
     if (n.lane === lanes.indexOf(key) && n.type === "hold") {
-      n.holding = false; // stop scoring
+      n.holding = false; // stop continuous scoring
+      n.hit = true;       // mark as "hit" so it can disappear after passing line
     }
   });
 });
@@ -133,8 +131,7 @@ function handleHit(note, keyPressed) {
   if (note.type === "normal") {
     score += 100;
     scoreEl.textContent = "Score: " + score;
-  } else if (note.type === "hold") {
-    // already handled continuously in gameLoop
+    note.hit = true;
   }
 }
 
@@ -152,34 +149,29 @@ function gameLoop() {
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // draw notes and handle hold scoring
+  // draw notes & scoring
   notes.forEach((n) => {
     n.y += 5;
     ctx.fillStyle = n.type === "hold" ? "orange" : "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, n.length);
 
-    // continuous hold scoring while key is pressed
-    if (n.type === "hold" && keys[lanes[n.lane]]) {
+    // normal note hit
+    if (n.type === "normal" && Math.abs(n.y - hitY) < hitWindow && keys[lanes[n.lane]]) {
+      handleHit(n, keys[lanes[n.lane]]);
+    }
+
+    // hold note continuous scoring
+    if (n.type === "hold" && keys[lanes[n.lane]] && !n.hit) {
       n.holding = true;
       score += 1;
       scoreEl.textContent = "Score: " + score;
-    }
-
-    // detect normal note hit
-    if (n.type === "normal" && Math.abs(n.y - hitY) < hitWindow && keys[lanes[n.lane]]) {
-      handleHit(n, keys[lanes[n.lane]]);
-      n.hit = true; // mark as hit
     }
   });
 
   // remove notes
   notes = notes.filter((n) => {
-    // remove normal notes after passing hit line or hit
     if (n.type === "normal" && (n.y > canvas.height || n.hit)) return false;
-
-    // remove hold notes if not holding and passed hit line
-    if (n.type === "hold" && !n.holding && n.y > hitY + n.length) return false;
-
+    if (n.type === "hold" && n.hit && n.y > hitY + n.length) return false; // disappear after released & passed line
     return true;
   });
 
