@@ -19,17 +19,11 @@ document.body.insertBefore(aiCanvas, canvas);
 const aiCtx = aiCanvas.getContext("2d");
 let aiHistory = [];
 
-// --- RMS Setup ---
-const rmsCanvas = document.getElementById("rmsCanvas");
-const rmsCtx = rmsCanvas.getContext("2d");
-let rmsHistory = [];
-const rmsHistoryLength = 1024;
-
 // --- Audio Setup ---
 const songUpload = document.getElementById("songUpload");
 const audioElement = new Audio();
 audioElement.crossOrigin = "anonymous";
-let audioContext, sourceNode, analyzer;
+let audioContext, sourceNode;
 
 // --- Load DrumKitRNN model ---
 let drumModel;
@@ -38,6 +32,12 @@ let drumModel;
   await drumModel.initialize();
   console.log("DrumKitRNN loaded");
 })();
+
+// --- Pre-generated sequence ---
+let generatedNotes = [];
+const bpm = 120; // you can adjust or detect dynamically
+const stepsPerQuarter = 4;
+const secondsPerStep = 60 / bpm / stepsPerQuarter;
 
 // --- File Upload ---
 songUpload.addEventListener("change", (e)=>{
@@ -63,56 +63,25 @@ playBtn.addEventListener("click", async ()=>{
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
-    // --- Small seed sequence so model generates notes ---
-    const seedSequence = {
-      notes: [{ pitch: 36, startStep: 0, endStep: 1 }], // Kick drum
-      totalQuantizedSteps: 4,
-      quantizationInfo: { stepsPerQuarter: 4 }
-    };
+    // --- Generate sequence once ---
+    if(drumModel){
+      const seedSequence = {
+        notes: [
+          { pitch: 36, startStep: 0, endStep: 1 }
+        ],
+        totalQuantizedSteps: 4,
+        quantizationInfo: { stepsPerQuarter }
+      };
 
-    let lastGenerationTime = 0;
-    const generationInterval = 0.3; // generate notes every 0.3s
+      const seq = await drumModel.generate({ seedDrumSequence: seedSequence, steps: 128 });
+      // convert steps to time
+      generatedNotes = seq.notes.map(n => ({
+        time: n.quantizedStartStep * secondsPerStep,
+        lane: n.pitch % lanes.length,
+        hit: false
+      }));
+    }
 
-    // --- Meyda Analyzer ---
-    analyzer = Meyda.createMeydaAnalyzer({
-      audioContext,
-      source: sourceNode,
-      bufferSize: 1024,
-      featureExtractors: ["rms"],
-      callback: async (features) => {
-        if(!features || !drumModel) return;
-        const rms = features.rms;
-        rmsHistory.push(rms);
-        if(rmsHistory.length > rmsHistoryLength) rmsHistory.shift();
-
-        const now = audioContext.currentTime;
-        let noteSpawned = false;
-
-        // --- Throttle generation ---
-        if(rms > 0.01 && now - lastGenerationTime > generationInterval){ 
-          lastGenerationTime = now;
-
-          const drumSeq = await drumModel.generate({
-            seedDrumSequence: seedSequence,
-            steps: 16 // generate a small sequence
-          });
-
-          if(drumSeq.notes.length > 0){
-            const first = drumSeq.notes[0];
-            const laneIndex = first.pitch % lanes.length;
-            notes.push({ lane: laneIndex, y: 0, hit: false });
-            noteSpawned = true;
-          }
-        }
-
-        // --- AI Visualization ---
-        aiHistory.push(noteSpawned ? 1 : 0);
-        if(aiHistory.length > aiCanvas.width) aiHistory.shift();
-        drawAIVisualization();
-      }
-    });
-
-    analyzer.start();
     await audioElement.play();
     playBtn.textContent = "Playing...";
     gameLoop();
@@ -143,6 +112,16 @@ function gameLoop(){
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
+  // spawn notes from generated sequence
+  const currentTime = audioElement.currentTime;
+  generatedNotes.forEach(n=>{
+    if(!n.spawned && currentTime >= n.time){
+      notes.push({ lane: n.lane, y: 0, hit: false });
+      n.spawned = true;
+      aiHistory.push(1);
+    }
+  });
+
   // draw notes
   notes.forEach(n=>{
     n.y += 5;
@@ -158,6 +137,11 @@ function gameLoop(){
   });
 
   notes = notes.filter(n => !n.hit && n.y < canvas.height);
+
+  // AI Visualization
+  aiHistory.push(0); // empty if no note spawned this frame
+  if(aiHistory.length > aiCanvas.width) aiHistory.shift();
+  drawAIVisualization();
 
   requestAnimationFrame(gameLoop);
 }
@@ -178,11 +162,10 @@ function drawAIVisualization(){
 
 // --- Reset ---
 function resetGame(){
-  if(analyzer) analyzer.stop();
   if(audioContext) audioContext.close();
   notes=[];
   score=0;
-  rmsHistory=[];
+  generatedNotes=[];
   aiHistory=[];
   scoreEl.textContent="Score: 0";
   playBtn.disabled=false;
