@@ -14,11 +14,14 @@ audioElement.crossOrigin = "anonymous";
 
 // === Play button logic ===
 playBtn.addEventListener("click", async () => {
+  console.log("Play button clicked...");
   playBtn.disabled = true;
   playBtn.textContent = "Loading...";
 
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   await audioContext.resume();
+
+  audioElement.load(); // force audio load
 
   audioElement.addEventListener("canplaythrough", () => {
     console.log("Audio ready, starting analyzer...");
@@ -47,6 +50,10 @@ playBtn.addEventListener("click", async () => {
     } catch (err) {
       console.error("Analyzer setup failed:", err);
     }
+  });
+
+  audioElement.addEventListener("error", (e) => {
+    console.error("Audio failed to load:", e);
   });
 });
 
