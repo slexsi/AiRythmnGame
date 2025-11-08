@@ -9,15 +9,10 @@ const hitWindow = 40;
 let notes = [];
 let score = 0;
 
-// AI visualization canvas
-const aiCanvas = document.createElement("canvas");
-aiCanvas.width = 600;
-aiCanvas.height = 100;
-aiCanvas.style.background = "#111";
-aiCanvas.style.marginTop = "20px";
-document.body.insertBefore(aiCanvas, canvas);
-const aiCtx = aiCanvas.getContext("2d");
-let aiHistory = [];
+// AI / NN visualization canvas
+const nnCanvas = document.getElementById("nnCanvas");
+const nnCtx = nnCanvas.getContext("2d");
+let nnHistory = [];
 
 // Buttons
 const playBtn = document.createElement("button");
@@ -33,15 +28,14 @@ let audioContext, sourceNode, analyzer;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
 
-// --- Mock Neural Network ---
-// A simple demo network: input last 20 RMS values, output beat probability
-let nnModel = {
-  predict: (input) => {
-    // just a fake function for demo: higher RMS -> higher beat probability
-    const avg = input.reduce((a, b) => a + b, 0) / input.length;
-    return Math.min(avg * 20, 1); // 0 -> 1
-  },
-};
+// --- Magenta MusicRNN Setup ---
+const rnnModel = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/drum_kit_rnn');
+let rnnReady = false;
+
+rnnModel.initialize().then(() => {
+  console.log("RNN model loaded.");
+  rnnReady = true;
+});
 
 // --- File upload ---
 songUpload.addEventListener("change", (e) => {
@@ -70,7 +64,7 @@ playBtn.addEventListener("click", async () => {
       source: sourceNode,
       bufferSize: 1024,
       featureExtractors: ["rms"],
-      callback: (features) => {
+      callback: async (features) => {
         if (!features) return;
         const rms = features.rms;
         const now = audioContext.currentTime;
@@ -79,9 +73,18 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- neural network decision ---
-        const inputWindow = rmsHistory.slice(-20);
-        const beatProb = nnModel.predict(inputWindow);
+        // --- Neural Network Prediction ---
+        let beatProb = 0;
+        if (rnnReady) {
+          // Create a simple dummy sequence for prediction
+          const seq = {
+            notes: [{ pitch: 36, startTime: 0, endTime: 0.1 }], // Kick drum
+            totalTime: 0.5
+          };
+          const continuation = await rnnModel.continueSequence(seq, 1, 1.0);
+          // If a note is predicted, we treat it as a beat
+          beatProb = continuation.notes.length > 0 ? 1 : 0;
+        }
 
         // spawn note if NN predicts
         let noteSpawned = false;
@@ -92,10 +95,10 @@ playBtn.addEventListener("click", async () => {
           noteSpawned = true;
         }
 
-        // --- AI visualization ---
-        aiHistory.push(beatProb);
-        if (aiHistory.length > aiCanvas.width) aiHistory.shift();
-        drawAIVisualization(noteSpawned);
+        // --- AI Visualization ---
+        nnHistory.push(beatProb);
+        if (nnHistory.length > nnCanvas.width) nnHistory.shift();
+        drawNNVisualization(noteSpawned);
       },
     });
 
@@ -147,18 +150,17 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-// --- AI Visualization ---
-function drawAIVisualization(noteSpawned) {
-  aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
-  aiHistory.forEach((val, i) => {
-    const h = val * aiCanvas.height;
-    aiCtx.fillStyle = "#08f";
-    aiCtx.fillRect(i, aiCanvas.height - h, 1, h);
+// --- AI / NN Visualization ---
+function drawNNVisualization(noteSpawned) {
+  nnCtx.clearRect(0, 0, nnCanvas.width, nnCanvas.height);
+  nnHistory.forEach((val, i) => {
+    const h = val * nnCanvas.height;
+    nnCtx.fillStyle = "#08f";
+    nnCtx.fillRect(i, nnCanvas.height - h, 1, h);
 
-    // mark when note spawned
     if (val > 0.5 && noteSpawned) {
-      aiCtx.fillStyle = "#0f8";
-      aiCtx.fillRect(i, 0, 1, aiCanvas.height);
+      nnCtx.fillStyle = "#0f8";
+      nnCtx.fillRect(i, 0, 1, nnCanvas.height);
     }
   });
 }
@@ -171,7 +173,7 @@ function resetGame() {
   notes = [];
   score = 0;
   rmsHistory = [];
-  aiHistory = [];
+  nnHistory = [];
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
