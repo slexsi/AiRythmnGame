@@ -29,7 +29,7 @@ playBtn.addEventListener("click", async () => {
       sourceNode = audioContext.createMediaElementSource(audioElement);
       sourceNode.connect(audioContext.destination);
 
-      // === Meyda Analyzer ===
+      // === Meyda Analyzer (only) ===
       analyzer = Meyda.createMeydaAnalyzer({
         audioContext,
         source: sourceNode,
@@ -37,9 +37,10 @@ playBtn.addEventListener("click", async () => {
         featureExtractors: ["spectralFlux"],
         callback: (features) => {
           console.log("SpectralFlux:", features?.spectralFlux); // debug log
-          if (features && features.spectralFlux > 0.001) { // adjust as needed
+          if (features && features.spectralFlux > 0.001) { // adjust threshold for your song
             const laneIndex = Math.floor(Math.random() * lanes.length);
             notes.push({ lane: laneIndex, y: 0 });
+            console.log("Meyda beat! Lane:", laneIndex);
           }
         },
       });
@@ -49,12 +50,6 @@ playBtn.addEventListener("click", async () => {
       gameLoop();
       playBtn.textContent = "Playing...";
       playBtn.style.opacity = "0.5";
-
-      // === Auto spawn fallback for testing ===
-      setInterval(() => {
-        const laneIndex = Math.floor(Math.random() * lanes.length);
-        notes.push({ lane: laneIndex, y: 0 });
-      }, 500);
 
     } catch (err) {
       console.error("Analyzer setup failed:", err);
@@ -113,7 +108,7 @@ function gameLoop() {
 
   // Draw notes
   for (let note of notes) {
-    ctx.fillStyle = "red";
+    ctx.fillStyle = "red"; // all notes are Meyda-generated
     ctx.fillRect(
       note.lane * laneWidth + laneWidth / 4,
       note.y,
