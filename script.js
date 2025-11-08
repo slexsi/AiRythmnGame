@@ -22,7 +22,7 @@ let audioContext, sourceNode, analyzer;
 
 // --- Magenta RNN Model ---
 let nnModel;
-const MODEL_URL = "model.mag"; // your hosted .mag file
+const MODEL_URL = "drum_kit_rnn.mag"; // your hosted .mag file
 
 async function loadRNN() {
   nnModel = new music_rnn.MusicRNN(MODEL_URL);
