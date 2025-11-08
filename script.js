@@ -48,7 +48,7 @@ async function loadRNN() {
   loadingStatus.textContent = "Loading RNN model...";
   // Replace this URL with your GitHub raw .mag file link
   rnnModel = new mm.MusicRNN(
-    'https://raw.githubusercontent.com/slexsi/AiRythmnGame/main/checkpoints/drum_kit_rnn.mag'
+    'https://raw.githubusercontent.com/slexsi/AiRythmnGame/main/drum_kit_rnn.mag'
   );
   try {
     await rnnModel.initialize();
