@@ -14,6 +14,9 @@
       flex-direction: column;
       align-items: center;
     }
+    h2 {
+      margin-top: 20px;
+    }
     canvas {
       border: 2px solid white;
       margin-top: 10px;
@@ -24,6 +27,19 @@
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
+      border: none;
+      background: #0f0;
+      color: #000;
+      border-radius: 8px;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: #9f9;
+    }
+    #score {
+      margin-top: 10px;
+      font-size: 18px;
     }
   </style>
 </head>
@@ -33,7 +49,9 @@
   <button id="playBtn">▶️ Play Song</button>
   <canvas id="gameCanvas" width="500" height="600"></canvas>
 
+  <!-- Meyda audio library -->
   <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
+
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
@@ -49,6 +67,7 @@
     const audioElement = new Audio("song.mp3");
     audioElement.crossOrigin = "anonymous";
 
+    // === play button logic ===
     playBtn.addEventListener("click", async () => {
       playBtn.disabled = true;
       playBtn.textContent = "Loading...";
@@ -88,6 +107,7 @@
       });
     });
 
+    // === input logic ===
     const keys = {};
     window.addEventListener("keydown", (e) => {
       const key = e.key.toLowerCase();
@@ -101,10 +121,11 @@
       if (lanes.includes(key)) keys[key] = false;
     });
 
+    // === hit detection ===
     function handleHit(key) {
       const laneIndex = lanes.indexOf(key);
-      const hitY = canvas.height - 100; // hit line position
-      const hitWindow = 40; // acceptable range
+      const hitY = canvas.height - 100;
+      const hitWindow = 40;
 
       for (let i = 0; i < notes.length; i++) {
         const note = notes[i];
@@ -112,7 +133,7 @@
           note.lane === laneIndex &&
           Math.abs(note.y - hitY) < hitWindow
         ) {
-          notes.splice(i, 1); // remove note
+          notes.splice(i, 1);
           score += 100;
           scoreEl.textContent = "Score: " + score;
           return;
@@ -120,6 +141,7 @@
       }
     }
 
+    // === main loop ===
     function gameLoop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -145,7 +167,7 @@
         note.y += 5;
       }
 
-      // remove notes that fall off screen
+      // remove notes off screen
       notes = notes.filter((n) => n.y < canvas.height);
 
       requestAnimationFrame(gameLoop);
