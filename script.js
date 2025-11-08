@@ -1,145 +1,180 @@
-// ===== script.js (AI-driven Magenta block notes) =====
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
-const songUpload = document.getElementById("songUpload");
 
 const lanes = ["a", "s", "k", "l"];
 const laneWidth = canvas.width / lanes.length;
 const hitY = canvas.height - 60;
+const hitWindow = 40;
 let notes = [];
 let score = 0;
 
+// AI visualization canvas
+const aiCanvas = document.createElement("canvas");
+aiCanvas.width = 600;
+aiCanvas.height = 100;
+aiCanvas.style.background = "#111";
+aiCanvas.style.marginTop = "20px";
+document.body.insertBefore(aiCanvas, canvas);
+const aiCtx = aiCanvas.getContext("2d");
+let aiHistory = [];
+
+// Buttons
+const playBtn = document.createElement("button");
+playBtn.textContent = "▶️ Play Song";
+document.body.insertBefore(playBtn, canvas.nextSibling);
+const songUpload = document.getElementById("songUpload");
+
 // Audio
-let audioCtx, sourceNode, analyser;
-let isPlaying = false;
+const audioElement = new Audio("song.mp3");
+audioElement.crossOrigin = "anonymous";
 
-// Magenta RNN
-let rnn;
-let sequenceToSpawn = [];
-let sequenceIndex = 0;
+let audioContext, sourceNode, analyzer;
+let rmsHistory = [];
+const historyLength = 1024 * 30;
 
-// Random lane colors
-const laneColors = ["#0ff", "#f0f", "#ff0", "#0f8"];
+// --- Mock Neural Network ---
+// A simple demo network: input last 20 RMS values, output beat probability
+let nnModel = {
+  predict: (input) => {
+    // just a fake function for demo: higher RMS -> higher beat probability
+    const avg = input.reduce((a, b) => a + b, 0) / input.length;
+    return Math.min(avg * 20, 1); // 0 -> 1
+  },
+};
 
-// --- Load Magenta model ---
-async function loadRNN() {
-  console.log("⏳ Loading Magenta model...");
-  rnn = new mm.MusicRNN(window.location.origin + "/drum_kit_rnn.mag");
-  await rnn.initialize();
-  console.log("✅ Magenta model loaded successfully!");
-}
+// --- File upload ---
+songUpload.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  audioElement.src = URL.createObjectURL(file);
+  resetGame();
+});
 
-// --- Generate a seed and continuation sequence ---
-async function generateRNNSequence() {
-  if (!rnn) return;
-  // simple seed: 4 kicks on every beat
-  const seedSeq = mm.sequences.createNoteSequence({
-    notes: [
-      { pitch: 36, startTime: 0, endTime: 0.25 },
-      { pitch: 38, startTime: 0.5, endTime: 0.75 },
-      { pitch: 42, startTime: 1.0, endTime: 1.25 },
-      { pitch: 46, startTime: 1.5, endTime: 1.75 },
-    ],
-    totalTime: 2,
-  });
+// --- Play button ---
+playBtn.addEventListener("click", async () => {
+  resetGame();
+  playBtn.textContent = "Loading...";
 
-  const continuation = await rnn.continueSequence(seedSeq, 32, 1.0);
-  sequenceToSpawn = continuation.notes.map(n => ({
-    time: n.startTime,
-    lane: n.pitch % 4, // map pitch to lane
-  }));
-  sequenceIndex = 0;
-}
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await audioContext.resume();
 
-// --- Spawn notes from RNN sequence ---
-function spawnNotesFromRNN(currentTime) {
-  while (
-    sequenceIndex < sequenceToSpawn.length &&
-    sequenceToSpawn[sequenceIndex].time <= currentTime
-  ) {
-    const laneIndex = sequenceToSpawn[sequenceIndex].lane;
-    notes.push({ lane: laneIndex, y: -20, hit: false });
-    sequenceIndex++;
+    sourceNode = audioContext.createMediaElementSource(audioElement);
+    sourceNode.connect(audioContext.destination);
+
+    let lastNoteTime = 0;
+
+    analyzer = Meyda.createMeydaAnalyzer({
+      audioContext,
+      source: sourceNode,
+      bufferSize: 1024,
+      featureExtractors: ["rms"],
+      callback: (features) => {
+        if (!features) return;
+        const rms = features.rms;
+        const now = audioContext.currentTime;
+
+        // --- store RMS ---
+        rmsHistory.push(rms);
+        if (rmsHistory.length > historyLength) rmsHistory.shift();
+
+        // --- neural network decision ---
+        const inputWindow = rmsHistory.slice(-20);
+        const beatProb = nnModel.predict(inputWindow);
+
+        // spawn note if NN predicts
+        let noteSpawned = false;
+        if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
+          lastNoteTime = now;
+          const laneIndex = Math.floor(Math.random() * lanes.length);
+          notes.push({ lane: laneIndex, y: 0, hit: false });
+          noteSpawned = true;
+        }
+
+        // --- AI visualization ---
+        aiHistory.push(beatProb);
+        if (aiHistory.length > aiCanvas.width) aiHistory.shift();
+        drawAIVisualization(noteSpawned);
+      },
+    });
+
+    analyzer.start();
+    await audioElement.play();
+    playBtn.textContent = "Playing...";
+    gameLoop();
+  } catch (err) {
+    console.error(err);
+    playBtn.textContent = "▶️ Try Again";
   }
-}
+});
 
-// --- Draw and update notes ---
-function drawNotes() {
-  notes.forEach(note => {
-    ctx.fillStyle = laneColors[note.lane];
-    ctx.fillRect(note.lane * laneWidth + 10, note.y, laneWidth - 20, 20);
-  });
-}
+// --- Key input ---
+const keys = {};
+window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
-function updateNotes() {
-  notes.forEach(note => (note.y += 4));
-  notes = notes.filter(note => note.y < canvas.height + 20 && !note.hit);
-}
-
-// --- Game loop ---
+// --- Main game loop ---
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // draw lanes
   lanes.forEach((key, i) => {
-    ctx.fillStyle = "#333";
+    ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  // hit line
+  // draw hit line
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // spawn notes from RNN
-  if (isPlaying) {
-    const currentTime = audioCtx.currentTime;
-    spawnNotesFromRNN(currentTime);
-  }
+  // draw notes
+  notes.forEach((n) => {
+    n.y += 5;
+    ctx.fillStyle = "red";
+    ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
-  // draw & update notes
-  drawNotes();
-  updateNotes();
+    const keyPressed = keys[lanes[n.lane]];
+    if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
+      score += 100;
+      scoreEl.textContent = "Score: " + score;
+      n.hit = true;
+    }
+  });
+
+  notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
   requestAnimationFrame(gameLoop);
 }
 
-// --- Handle key presses ---
-const keys = {};
-document.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; });
-document.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+// --- AI Visualization ---
+function drawAIVisualization(noteSpawned) {
+  aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
+  aiHistory.forEach((val, i) => {
+    const h = val * aiCanvas.height;
+    aiCtx.fillStyle = "#08f";
+    aiCtx.fillRect(i, aiCanvas.height - h, 1, h);
 
-function checkHits() {
-  notes.forEach(note => {
-    if (keys[lanes[note.lane]] && Math.abs(note.y - hitY) < 30 && !note.hit) {
-      score += 10;
-      note.hit = true;
-      scoreEl.textContent = `Score: ${score}`;
+    // mark when note spawned
+    if (val > 0.5 && noteSpawned) {
+      aiCtx.fillStyle = "#0f8";
+      aiCtx.fillRect(i, 0, 1, aiCanvas.height);
     }
   });
 }
-setInterval(checkHits, 20);
 
-// --- Start audio and RNN ---
-async function startSong(file) {
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const arrayBuffer = await file.arrayBuffer();
-  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-  sourceNode = audioCtx.createBufferSource();
-  sourceNode.buffer = audioBuffer;
-  sourceNode.connect(audioCtx.destination);
-  sourceNode.start();
-  isPlaying = true;
-  gameLoop();
-  await generateRNNSequence();
+// --- Reset ---
+function resetGame() {
+  if (analyzer) analyzer.stop();
+  if (audioContext) audioContext.close();
+
+  notes = [];
+  score = 0;
+  rmsHistory = [];
+  aiHistory = [];
+  scoreEl.textContent = "Score: 0";
+  playBtn.disabled = false;
+  playBtn.textContent = "▶️ Play Song";
+  audioElement.pause();
+  audioElement.currentTime = 0;
 }
-
-// --- File upload ---
-songUpload.addEventListener("change", e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  startSong(file);
-});
-
-// --- Load model immediately ---
-loadRNN();
