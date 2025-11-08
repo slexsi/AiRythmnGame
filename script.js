@@ -36,9 +36,15 @@ playBtn.addEventListener("click", async () => {
         featureExtractors: ["spectralFlux"],
         callback: (features) => {
           try {
-            if (features && features.spectralFlux && features.spectralFlux > 0.02) {
+            if (
+              features &&
+              typeof features.spectralFlux === "number" &&
+              !isNaN(features.spectralFlux) &&
+              features.spectralFlux > 0.02
+            ) {
               beatMap.push(audioContext.currentTime);
               notes.push({ x: Math.random() * (canvas.width - 30), y: 0 });
+              console.log("Beat detected:", features.spectralFlux.toFixed(3));
             }
           } catch (err) {
             console.warn("Skipped a frame:", err);
@@ -55,5 +61,15 @@ playBtn.addEventListener("click", async () => {
       console.error("Error setting up analyzer:", err);
     }
   });
+});
 
-  /
+// 🎵 Draw falling notes
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "red";
+  notes.forEach((note) => {
+    note.y += 5;
+    ctx.fillRect(note.x, note.y, 30, 30);
+  });
+  requestAnimationFrame(gameLoop);
+}
