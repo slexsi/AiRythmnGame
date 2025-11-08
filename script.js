@@ -81,9 +81,9 @@ playBtn.addEventListener("click", async () => {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
 
-          // calculate fall speed so note reaches hit line in one beat
-          const fallSpeed = hitY / beatInterval;
-          notes.push({ lane: laneIndex, y: 0, hit: false, speed: fallSpeed });
+          // calculate speed so note reaches hit line in one beat
+          const speed = hitY / beatInterval;
+          notes.push({ lane: laneIndex, y: 0, hit: false, speed });
         }
       },
     });
