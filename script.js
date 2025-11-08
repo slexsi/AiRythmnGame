@@ -26,6 +26,9 @@ let bpm = 120; // default BPM
 let rmsHistory = [];
 const historyLength = 1024 * 30; // ~30 buffers for BPM estimation
 
+// track currently pressed keys
+const keys = {};
+
 // --- File upload listener ---
 songUpload.addEventListener("change", (e) => {
   const file = e.target.files[0];
@@ -113,12 +116,12 @@ playBtn.addEventListener("click", async () => {
 });
 
 // --- Key input ---
-const keys = {};
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
   if (!keys[key]) keys[key] = true; // track first press
   handleHit(key);
 });
+
 window.addEventListener("keyup", (e) => {
   const key = e.key.toLowerCase();
   keys[key] = false;
@@ -127,7 +130,7 @@ window.addEventListener("keyup", (e) => {
   notes.forEach((n) => {
     if (n.lane === lanes.indexOf(key) && n.type === "hold" && n.holding) {
       n.holding = false; // stop holding
-      score += Math.round(n.length / 5); // final reward for hold
+      score += Math.round(n.length / 5); // final reward
       scoreEl.textContent = "Score: " + score;
     }
   });
@@ -141,18 +144,15 @@ function handleHit(key) {
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i];
 
-    if (note.lane === laneIndex) {
-      if (note.type === "normal" && Math.abs(note.y - hitY) < hitWindow) {
-        // remove normal note
+    if (note.lane === laneIndex && Math.abs(note.y - hitY) < hitWindow) {
+      if (note.type === "normal") {
         notes.splice(i, 1);
         score += 100;
         scoreEl.textContent = "Score: " + score;
-        break;
-      } else if (note.type === "hold" && Math.abs(note.y - hitY) < hitWindow) {
+      } else if (note.type === "hold") {
         note.holding = true; // start tracking hold
-        note.holdStartY = note.y; // optional for visual fill
-        break;
       }
+      break;
     }
   }
 }
