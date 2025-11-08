@@ -96,13 +96,10 @@ playBtn.addEventListener("click", async () => {
 // --- Key input ---
 const keys = {};
 window.addEventListener("keydown", (e) => {
-  const key = e.key.toLowerCase();
-  keys[key] = true;
+  keys[e.key.toLowerCase()] = true;
 });
-
 window.addEventListener("keyup", (e) => {
-  const key = e.key.toLowerCase();
-  keys[key] = false;
+  keys[e.key.toLowerCase()] = false;
 });
 
 // --- Main game loop ---
