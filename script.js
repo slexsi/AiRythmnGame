@@ -49,7 +49,7 @@ playBtn.addEventListener("click", async () => {
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
-    let lastBeat = 0;
+    let lastNoteTime = 0;
 
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
@@ -59,8 +59,11 @@ playBtn.addEventListener("click", async () => {
       callback: (features) => {
         if (!features) return;
 
+        const rms = features.rms;
+        const now = audioContext.currentTime;
+
         // store RMS for BPM estimation
-        rmsHistory.push(features.rms);
+        rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
         // simple BPM estimation
@@ -71,14 +74,16 @@ playBtn.addEventListener("click", async () => {
           bpm = Math.round((peaks / seconds) * 60);
         }
 
-        const now = audioContext.currentTime;
         const beatInterval = 60 / bpm;
 
-        // spawn normal notes only
-        if (features.rms > 0.05 && now - lastBeat > beatInterval * 0.9) {
-          lastBeat = now;
+        // spawn note exactly on beat
+        if (rms > 0.05 && now - lastNoteTime > beatInterval * 0.9) {
+          lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
-          notes.push({ lane: laneIndex, y: 0, hit: false });
+
+          // calculate fall speed so note reaches hit line in one beat
+          const fallSpeed = hitY / beatInterval;
+          notes.push({ lane: laneIndex, y: 0, hit: false, speed: fallSpeed });
         }
       },
     });
@@ -118,7 +123,7 @@ function gameLoop() {
 
   // draw notes & scoring
   notes.forEach((n) => {
-    n.y += 5;
+    n.y += n.speed || 5; // use tempo-synced speed if available
     ctx.fillStyle = "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
