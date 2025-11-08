@@ -37,7 +37,6 @@ const historyLength = 1024 * 30;
 let rnn;
 async function loadMagentaModel() {
   try {
-    // Automatically load from same folder (works on GitHub Pages)
     const modelUrl = window.location.origin + "/drum_kit_rnn.mag";
     rnn = new mm.MusicRNN(modelUrl);
     await rnn.initialize();
@@ -47,14 +46,16 @@ async function loadMagentaModel() {
   }
 }
 
-// Convert RMS to a mini note seed and run the RNN
+// === AI beat generator ===
+let aiBeatTimer = 0;
+let lastBeatProb = 0;
+
 async function generateBeatPattern(rmsHistory) {
-  if (!rnn) return 0;
-  if (rmsHistory.length < 8) return 0;
+  if (!rnn || rmsHistory.length < 8) return 0;
 
   const seedSeq = {
     notes: rmsHistory.slice(-8).map((r, i) => ({
-      pitch: 60 + Math.floor(r * 20), // RMS → pseudo pitch
+      pitch: 60 + Math.floor(r * 20),
       startTime: i * 0.25,
       endTime: i * 0.25 + 0.2,
     })),
@@ -63,14 +64,14 @@ async function generateBeatPattern(rmsHistory) {
 
   try {
     const continuation = await rnn.continueSequence(seedSeq, 8, 1.0);
-    return continuation.notes.length > 4 ? 1 : 0; // beat prob style
+    return continuation.notes.length / 8;
   } catch (e) {
     console.error("RNN generation error:", e);
     return 0;
   }
 }
 
-// Load model on start
+// === Load model on start ===
 loadMagentaModel();
 
 // === File upload ===
@@ -108,20 +109,26 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- Use Magenta model output asynchronously ---
-        generateBeatPattern(rmsHistory).then((beatProb) => {
-          let noteSpawned = false;
-          if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
-            lastNoteTime = now;
-            const laneIndex = Math.floor(Math.random() * lanes.length);
-            notes.push({ lane: laneIndex, y: 0, hit: false });
-            noteSpawned = true;
-          }
+        // Only ask AI every 0.3s to reduce lag
+        if (now - aiBeatTimer > 0.3) {
+          aiBeatTimer = now;
+          generateBeatPattern(rmsHistory).then(prob => (lastBeatProb = prob));
+        }
 
-          aiHistory.push(beatProb);
-          if (aiHistory.length > aiCanvas.width) aiHistory.shift();
-          drawAIVisualization(noteSpawned);
-        });
+        // Mix AI beat and RMS amplitude
+        const spawnChance = lastBeatProb * 0.7 + rms * 0.3;
+        let noteSpawned = false;
+
+        if (Math.random() < spawnChance * 0.4 && now - lastNoteTime > 0.25) {
+          lastNoteTime = now;
+          const laneIndex = Math.floor(Math.random() * lanes.length);
+          notes.push({ lane: laneIndex, y: 0, hit: false });
+          noteSpawned = true;
+        }
+
+        aiHistory.push(spawnChance);
+        if (aiHistory.length > aiCanvas.width) aiHistory.shift();
+        drawAIVisualization(noteSpawned);
       },
     });
 
@@ -157,8 +164,7 @@ function gameLoop() {
   // draw notes
   notes.forEach((n) => {
     n.y += 5;
-    ctx.fillStyle = "red";
-    ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
+    drawArrow(n.lane * laneWidth + laneWidth / 2, n.y, 20, "red");
 
     const keyPressed = keys[lanes[n.lane]];
     if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
@@ -168,9 +174,24 @@ function gameLoop() {
     }
   });
 
-  notes = notes.filter((n) => !n.hit && n.y < canvas.height);
+  notes = notes.filter((n) => !n.hit && n.y < canvas.height + 50);
 
   requestAnimationFrame(gameLoop);
+}
+
+// === Draw fancy arrow ===
+function drawArrow(x, y, size, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x, y - size);
+  ctx.lineTo(x + size * 0.6, y);
+  ctx.lineTo(x + size * 0.3, y);
+  ctx.lineTo(x + size * 0.3, y + size);
+  ctx.lineTo(x - size * 0.3, y + size);
+  ctx.lineTo(x - size * 0.3, y);
+  ctx.lineTo(x - size * 0.6, y);
+  ctx.closePath();
+  ctx.fill();
 }
 
 // === AI Visualization ===
