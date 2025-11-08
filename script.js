@@ -72,11 +72,10 @@ playBtn.addEventListener("click", async () => {
       callback: (features) => {
         if (!features) return;
 
-        // store RMS for BPM estimation
         rmsHistory.push(features.rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // simple BPM estimation every historyLength frames
+        // simple BPM estimation
         if (rmsHistory.length === historyLength) {
           const threshold = 0.08;
           const peaks = rmsHistory.filter(v => v > threshold).length;
@@ -84,18 +83,14 @@ playBtn.addEventListener("click", async () => {
           bpm = Math.round((peaks / seconds) * 60);
         }
 
-        // spawn notes
         const now = audioContext.currentTime;
         const beatInterval = 60 / bpm;
 
         if (features.rms > 0.05 && now - lastBeat > beatInterval * 0.9) {
           lastBeat = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
-
-          // randomly create hold notes (20% chance)
           const type = Math.random() < 0.2 ? "hold" : "normal";
           const length = type === "hold" ? 80 : 30;
-
           notes.push({ lane: laneIndex, y: 0, type, length, holding: false });
           console.log("Beat! Lane:", lanes[laneIndex], "Type:", type, "RMS:", features.rms.toFixed(3));
         }
@@ -118,8 +113,7 @@ playBtn.addEventListener("click", async () => {
 // --- Key input ---
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
-  keys[key] = true;
-  handleHit(key);
+  if (!keys[key]) keys[key] = true; // track first press
 });
 
 window.addEventListener("keyup", (e) => {
@@ -128,32 +122,19 @@ window.addEventListener("keyup", (e) => {
 
   // release hold notes
   notes.forEach((n) => {
-    if (n.lane === lanes.indexOf(key) && n.type === "hold" && n.holding) {
-      n.holding = false; // stop holding
-      score += Math.round(n.length / 5); // final reward for hold
-      scoreEl.textContent = "Score: " + score;
+    if (n.lane === lanes.indexOf(key) && n.type === "hold") {
+      n.holding = false; // stop scoring
     }
   });
 });
 
 // --- Hit detection ---
-function handleHit(key) {
-  const laneIndex = lanes.indexOf(key);
-  if (laneIndex === -1) return;
-
-  for (let i = 0; i < notes.length; i++) {
-    const note = notes[i];
-
-    if (note.lane === laneIndex && Math.abs(note.y - hitY) < hitWindow) {
-      if (note.type === "normal") {
-        notes.splice(i, 1);
-        score += 100;
-        scoreEl.textContent = "Score: " + score;
-      } else if (note.type === "hold") {
-        note.holding = true; // start tracking hold
-      }
-      break;
-    }
+function handleHit(note, keyPressed) {
+  if (note.type === "normal") {
+    score += 100;
+    scoreEl.textContent = "Score: " + score;
+  } else if (note.type === "hold") {
+    // already handled continuously in gameLoop
   }
 }
 
@@ -171,24 +152,34 @@ function gameLoop() {
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // draw notes & handle hold scoring
+  // draw notes and handle hold scoring
   notes.forEach((n) => {
-    n.y += 5; // note speed
+    n.y += 5;
     ctx.fillStyle = n.type === "hold" ? "orange" : "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, n.length);
 
-    // hold logic: continuously award points if key pressed
+    // continuous hold scoring while key is pressed
     if (n.type === "hold" && keys[lanes[n.lane]]) {
       n.holding = true;
-      score += 1; // points per frame
+      score += 1;
       scoreEl.textContent = "Score: " + score;
+    }
+
+    // detect normal note hit
+    if (n.type === "normal" && Math.abs(n.y - hitY) < hitWindow && keys[lanes[n.lane]]) {
+      handleHit(n, keys[lanes[n.lane]]);
+      n.hit = true; // mark as hit
     }
   });
 
-  // remove notes off screen or completed hold
-  notes = notes.filter(n => {
-    if (n.type === "normal" && n.y > canvas.height) return false;
+  // remove notes
+  notes = notes.filter((n) => {
+    // remove normal notes after passing hit line or hit
+    if (n.type === "normal" && (n.y > canvas.height || n.hit)) return false;
+
+    // remove hold notes if not holding and passed hit line
     if (n.type === "hold" && !n.holding && n.y > hitY + n.length) return false;
+
     return true;
   });
 
