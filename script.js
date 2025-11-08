@@ -5,12 +5,11 @@ let notes = [];
 let beatMap = [];
 let audioContext, sourceNode, analyzer;
 
-// create play button
 const playBtn = document.createElement("button");
 playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas);
 
-// create audio element (make sure you have song.mp3 in your repo)
+// Make sure your file is literally named song.mp3 and in the same folder
 const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
@@ -18,54 +17,43 @@ playBtn.addEventListener("click", async () => {
   playBtn.disabled = true;
   playBtn.textContent = "Loading...";
 
+  // Create audio context and unlock it
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  sourceNode = audioContext.createMediaElementSource(audioElement);
-  sourceNode.connect(audioContext.destination);
+  await audioContext.resume();
 
-  await audioContext.resume(); // unlock audio on user click
+  // Wait until the song is fully ready
+  audioElement.addEventListener("canplaythrough", () => {
+    console.log("Audio is ready. Starting analyzer...");
 
-  // wait until the song can play
-  audioElement.addEventListener("canplay", () => {
-    console.log("Audio ready, starting analyzer...");
+    try {
+      sourceNode = audioContext.createMediaElementSource(audioElement);
+      sourceNode.connect(audioContext.destination);
 
-    analyzer = Meyda.createMeydaAnalyzer({
-      audioContext: audioContext,
-      source: sourceNode,
-      bufferSize: 512,
-      featureExtractors: ["spectralFlux"],
-      callback: (features) => {
-        try {
-          if (features.spectralFlux > 0.02) {
-            beatMap.push(audioContext.currentTime);
-            notes.push({ x: Math.random() * (canvas.width - 30), y: 0 });
+      analyzer = Meyda.createMeydaAnalyzer({
+        audioContext,
+        source: sourceNode,
+        bufferSize: 1024,
+        featureExtractors: ["spectralFlux"],
+        callback: (features) => {
+          try {
+            if (features && features.spectralFlux && features.spectralFlux > 0.02) {
+              beatMap.push(audioContext.currentTime);
+              notes.push({ x: Math.random() * (canvas.width - 30), y: 0 });
+            }
+          } catch (err) {
+            console.warn("Skipped a frame:", err);
           }
-        } catch (e) {
-          console.warn("Meyda skipped a frame:", e);
-        }
-      },
-    });
+        },
+      });
 
-    analyzer.start();
-    audioElement.play();
-    gameLoop();
+      analyzer.start();
+      audioElement.play();
+      gameLoop();
+      playBtn.textContent = "Playing...";
 
-    playBtn.textContent = "Playing...";
+    } catch (err) {
+      console.error("Error setting up analyzer:", err);
+    }
   });
 
-  audioElement.load();
-});
-
-function gameLoop() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "white";
-  ctx.fillText("Detected Beats: " + beatMap.length, 10, 20);
-
-  ctx.fillStyle = "red";
-  notes.forEach((note) => {
-    note.y += 3;
-    ctx.fillRect(note.x, note.y, 20, 20);
-  });
-
-  notes = notes.filter((note) => note.y < canvas.height);
-  requestAnimationFrame(gameLoop);
-}
+  /
