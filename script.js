@@ -125,7 +125,7 @@ playBtn.addEventListener("click", async () => {
         }
 
         // --- AI visualization ---
-        aiHistory.push(rms); // can still visualize RMS
+        aiHistory.push(rms); // visualize RMS
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
         drawAIVisualization(noteSpawned);
       }
