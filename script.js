@@ -22,6 +22,9 @@ const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
+let bpm = 120; // default BPM
+let rmsHistory = [];
+const historyLength = 1024 * 30; // ~30 buffers for BPM estimation
 
 // --- File upload listener ---
 songUpload.addEventListener("change", (e) => {
@@ -37,6 +40,8 @@ songUpload.addEventListener("change", (e) => {
 
   notes = [];
   score = 0;
+  bpm = 120;
+  rmsHistory = [];
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
@@ -56,21 +61,40 @@ playBtn.addEventListener("click", async () => {
 
     let lastBeat = 0;
 
-    // Meyda analyzer: RMS-based beat detection
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
       source: sourceNode,
       bufferSize: 1024,
       featureExtractors: ["rms"],
       callback: (features) => {
-        if (features && features.rms > 0.05) {
-          const now = audioContext.currentTime;
-          if (now - lastBeat > 0.25) { // min spacing between notes
-            lastBeat = now;
-            const laneIndex = Math.floor(Math.random() * lanes.length);
-            notes.push({ lane: laneIndex, y: 0 });
-            console.log("Beat! Lane:", lanes[laneIndex], "RMS:", features.rms.toFixed(3));
-          }
+        if (!features) return;
+
+        // store RMS for BPM estimation
+        rmsHistory.push(features.rms);
+        if (rmsHistory.length > historyLength) rmsHistory.shift();
+
+        // simple BPM estimation every historyLength frames
+        if (rmsHistory.length === historyLength) {
+          const threshold = 0.08;
+          const peaks = rmsHistory.filter(v => v > threshold).length;
+          const seconds = (historyLength * 1024) / audioContext.sampleRate;
+          bpm = Math.round((peaks / seconds) * 60);
+        }
+
+        // spawn notes
+        const now = audioContext.currentTime;
+        const beatInterval = 60 / bpm;
+
+        if (features.rms > 0.05 && now - lastBeat > beatInterval * 0.9) {
+          lastBeat = now;
+          const laneIndex = Math.floor(Math.random() * lanes.length);
+
+          // randomly create hold notes (20% chance)
+          const type = Math.random() < 0.2 ? "hold" : "normal";
+          const length = type === "hold" ? 80 : 30;
+
+          notes.push({ lane: laneIndex, y: 0, type, length, holding: false });
+          console.log("Beat! Lane:", lanes[laneIndex], "Type:", type, "RMS:", features.rms.toFixed(3));
         }
       },
     });
@@ -81,7 +105,6 @@ playBtn.addEventListener("click", async () => {
     playBtn.style.opacity = "0.5";
 
     gameLoop();
-
   } catch (err) {
     console.error("Error:", err);
     playBtn.disabled = false;
@@ -97,7 +120,17 @@ window.addEventListener("keydown", (e) => {
   handleHit(key);
 });
 window.addEventListener("keyup", (e) => {
-  keys[e.key.toLowerCase()] = false;
+  const key = e.key.toLowerCase();
+  keys[key] = false;
+
+  // handle releasing hold notes
+  notes.forEach((n) => {
+    if (n.lane === lanes.indexOf(key) && n.type === "hold" && n.holding) {
+      n.holding = false;
+      score += Math.round(n.length / 5); // reward for hold
+      scoreEl.textContent = "Score: " + score;
+    }
+  });
 });
 
 // --- Hit detection ---
@@ -107,11 +140,16 @@ function handleHit(key) {
 
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i];
-    if (note.lane === laneIndex && Math.abs(note.y - hitY) < hitWindow) {
-      notes.splice(i, 1);
-      score += 100;
-      scoreEl.textContent = "Score: " + score;
-      break;
+    if (note.lane === laneIndex) {
+      if (note.type === "normal" && Math.abs(note.y - hitY) < hitWindow) {
+        notes.splice(i, 1);
+        score += 100;
+        scoreEl.textContent = "Score: " + score;
+        break;
+      } else if (note.type === "hold" && Math.abs(note.y - hitY) < hitWindow) {
+        note.holding = true; // start tracking hold
+        break;
+      }
     }
   }
 }
@@ -133,8 +171,8 @@ function gameLoop() {
   // draw notes
   notes.forEach((n) => {
     n.y += 5; // note speed
-    ctx.fillStyle = "red";
-    ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
+    ctx.fillStyle = n.type === "hold" ? "orange" : "red";
+    ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, n.length);
   });
 
   // remove notes off screen
