@@ -78,15 +78,17 @@ playBtn.addEventListener("click", async () => {
 
         const beatInterval = 60 / bpm;
 
-        // spawn note
+        // --- Spawn note ---
+        let noteSpawned = false;
         if (rms > 0.05 && now - lastNoteTime > beatInterval * 0.9) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ lane: laneIndex, y: 0, hit: false });
+          noteSpawned = true;
         }
 
-        // --- AI visualization ---
-        rmsHistoryVisual.push(rms);
+        // --- AI visualization: mark when note is spawned ---
+        rmsHistoryVisual.push(noteSpawned ? 1 : 0);
         if (rmsHistoryVisual.length > aiCanvas.width) rmsHistoryVisual.shift();
         drawAIVisualization();
       },
@@ -140,14 +142,24 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-// --- AI visualization ---
+// --- Draw AI Visualization ---
 function drawAIVisualization() {
   aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
-  aiCtx.fillStyle = "#0f8";
-  rmsHistoryVisual.forEach((r, i) => {
-    const h = r * aiCanvas.height * 5; // scale for visibility
-    aiCtx.fillRect(i, aiCanvas.height - h, 1, h);
+  rmsHistoryVisual.forEach((val, i) => {
+    if (val > 0) {
+      aiCtx.fillStyle = "#0f8";
+      aiCtx.fillRect(i, 0, 1, aiCanvas.height); // vertical line when AI spawns a note
+    }
   });
+
+  // Optional: show threshold line
+  const thresholdY = aiCanvas.height - (0.05 * aiCanvas.height * 5);
+  aiCtx.strokeStyle = "#f00";
+  aiCtx.lineWidth = 1;
+  aiCtx.beginPath();
+  aiCtx.moveTo(0, thresholdY);
+  aiCtx.lineTo(aiCanvas.width, thresholdY);
+  aiCtx.stroke();
 }
 
 // --- Reset ---
