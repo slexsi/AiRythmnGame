@@ -32,6 +32,7 @@ let audioContext, sourceNode, analyzer;
 let bpm = 120;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
+let lastNoteTime = 0;
 
 // --- File upload ---
 songUpload.addEventListener("change", (e) => {
@@ -52,8 +53,6 @@ playBtn.addEventListener("click", async () => {
 
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
-
-    let lastNoteTime = 0;
 
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
@@ -78,7 +77,7 @@ playBtn.addEventListener("click", async () => {
 
         const beatInterval = 60 / bpm;
 
-        // --- Spawn note ---
+        // spawn note
         let noteSpawned = false;
         if (rms > 0.05 && now - lastNoteTime > beatInterval * 0.9) {
           lastNoteTime = now;
@@ -87,8 +86,8 @@ playBtn.addEventListener("click", async () => {
           noteSpawned = true;
         }
 
-        // --- AI visualization: mark when note is spawned ---
-        rmsHistoryVisual.push(noteSpawned ? 1 : 0);
+        // --- AI visualization: RMS graph + note markers ---
+        rmsHistoryVisual.push({ rms: rms, noteSpawned: noteSpawned });
         if (rmsHistoryVisual.length > aiCanvas.width) rmsHistoryVisual.shift();
         drawAIVisualization();
       },
@@ -145,14 +144,31 @@ function gameLoop() {
 // --- Draw AI Visualization ---
 function drawAIVisualization() {
   aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
-  rmsHistoryVisual.forEach((val, i) => {
-    if (val > 0) {
-      aiCtx.fillStyle = "#0f8";
-      aiCtx.fillRect(i, 0, 1, aiCanvas.height); // vertical line when AI spawns a note
+
+  // Draw RMS graph
+  aiCtx.strokeStyle = "#0f8";
+  aiCtx.lineWidth = 2;
+  aiCtx.beginPath();
+  rmsHistoryVisual.forEach((item, i) => {
+    const y = aiCanvas.height - item.rms * aiCanvas.height * 5; // scale RMS
+    if (i === 0) aiCtx.moveTo(i, y);
+    else aiCtx.lineTo(i, y);
+  });
+  aiCtx.stroke();
+
+  // Draw vertical lines for note spawns
+  rmsHistoryVisual.forEach((item, i) => {
+    if (item.noteSpawned) {
+      aiCtx.strokeStyle = "#ff0";
+      aiCtx.lineWidth = 1;
+      aiCtx.beginPath();
+      aiCtx.moveTo(i, 0);
+      aiCtx.lineTo(i, aiCanvas.height);
+      aiCtx.stroke();
     }
   });
 
-  // Optional: show threshold line
+  // Draw threshold line (optional)
   const thresholdY = aiCanvas.height - (0.05 * aiCanvas.height * 5);
   aiCtx.strokeStyle = "#f00";
   aiCtx.lineWidth = 1;
