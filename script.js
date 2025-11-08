@@ -9,35 +9,39 @@ const hitWindow = 40;
 let notes = [];
 let score = 0;
 
-// button setup
+// AI visualization
+const aiCanvas = document.createElement("canvas");
+aiCanvas.width = 600;
+aiCanvas.height = 100;
+aiCanvas.style.background = "#111";
+aiCanvas.style.marginTop = "20px";
+document.body.insertBefore(aiCanvas, canvas);
+const aiCtx = aiCanvas.getContext("2d");
+let rmsHistoryVisual = [];
+
 const playBtn = document.createElement("button");
 playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas.nextSibling);
 
-// file input for uploading a song
 const songUpload = document.getElementById("songUpload");
 
-// audio element
 const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
-let bpm = 120; // default BPM
+let bpm = 120;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
 
-// --- File upload listener ---
+// --- File upload ---
 songUpload.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (!file) return;
-
-  const url = URL.createObjectURL(file);
-  audioElement.src = url;
-
+  audioElement.src = URL.createObjectURL(file);
   resetGame();
 });
 
-// --- Play button logic ---
+// --- Play button ---
 playBtn.addEventListener("click", async () => {
   resetGame();
   playBtn.textContent = "Loading...";
@@ -58,15 +62,13 @@ playBtn.addEventListener("click", async () => {
       featureExtractors: ["rms"],
       callback: (features) => {
         if (!features) return;
-
         const rms = features.rms;
         const now = audioContext.currentTime;
 
-        // store RMS for BPM estimation
+        // --- Store RMS for beat detection ---
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // simple BPM estimation
         if (rmsHistory.length === historyLength) {
           const threshold = 0.08;
           const peaks = rmsHistory.filter(v => v > threshold).length;
@@ -76,12 +78,17 @@ playBtn.addEventListener("click", async () => {
 
         const beatInterval = 60 / bpm;
 
-        // spawn note exactly on beat
+        // spawn note
         if (rms > 0.05 && now - lastNoteTime > beatInterval * 0.9) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ lane: laneIndex, y: 0, hit: false });
         }
+
+        // --- AI visualization ---
+        rmsHistoryVisual.push(rms);
+        if (rmsHistoryVisual.length > aiCanvas.width) rmsHistoryVisual.shift();
+        drawAIVisualization();
       },
     });
 
@@ -90,19 +97,15 @@ playBtn.addEventListener("click", async () => {
     playBtn.textContent = "Playing...";
     gameLoop();
   } catch (err) {
-    console.error("Error:", err);
+    console.error(err);
     playBtn.textContent = "▶️ Try Again";
   }
 });
 
 // --- Key input ---
 const keys = {};
-window.addEventListener("keydown", (e) => {
-  keys[e.key.toLowerCase()] = true;
-});
-window.addEventListener("keyup", (e) => {
-  keys[e.key.toLowerCase()] = false;
-});
+window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
 // --- Main game loop ---
 function gameLoop() {
@@ -118,14 +121,13 @@ function gameLoop() {
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // draw notes & scoring
+  // draw notes
   notes.forEach((n) => {
     n.y += 5;
     ctx.fillStyle = "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
     const keyPressed = keys[lanes[n.lane]];
-
     if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
       score += 100;
       scoreEl.textContent = "Score: " + score;
@@ -133,13 +135,22 @@ function gameLoop() {
     }
   });
 
-  // remove notes that are hit or off-screen
   notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
   requestAnimationFrame(gameLoop);
 }
 
-// --- Reset game function ---
+// --- AI visualization ---
+function drawAIVisualization() {
+  aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
+  aiCtx.fillStyle = "#0f8";
+  rmsHistoryVisual.forEach((r, i) => {
+    const h = r * aiCanvas.height * 5; // scale for visibility
+    aiCtx.fillRect(i, aiCanvas.height - h, 1, h);
+  });
+}
+
+// --- Reset ---
 function resetGame() {
   if (analyzer) analyzer.stop();
   if (audioContext) audioContext.close();
@@ -148,6 +159,7 @@ function resetGame() {
   score = 0;
   bpm = 120;
   rmsHistory = [];
+  rmsHistoryVisual = [];
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
