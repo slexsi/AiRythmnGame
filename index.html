@@ -14,11 +14,14 @@
     canvas {
       background: #222;
       border-radius: 12px;
+      margin-top: 20px;
       display: block;
-      margin: 20px auto;
+      margin-left: auto;
+      margin-right: auto;
     }
-    #nnCanvas {
-      height: 100px;
+    #score {
+      margin-top: 10px;
+      font-size: 20px;
     }
     button {
       margin-top: 20px;
@@ -32,42 +35,21 @@
     button:disabled {
       opacity: 0.6;
     }
-    #score {
-      margin-top: 10px;
-      font-size: 20px;
-    }
-    #loadingStatus {
-      margin-top: 10px;
-      color: #0f8;
-    }
   </style>
 </head>
 <body>
   <h1>AI Rhythm Demo 🎵</h1>
 
-  <!-- Neural Network / AI Visualization Canvas -->
-  <canvas id="nnCanvas" width="600" height="100"></canvas>
-
-  <!-- Main Game Canvas -->
+  <canvas id="rmsCanvas" width="600" height="100"></canvas>
   <canvas id="gameCanvas" width="600" height="400"></canvas>
-
-  <!-- Score Display -->
   <div id="score">Score: 0</div>
-
-  <!-- Loading Status -->
-  <div id="loadingStatus">Loading RNN...</div>
-
-  <!-- Audio Upload -->
   <input type="file" id="songUpload" accept="audio/*">
+  <button id="playBtn">▶️ Play Song</button>
 
-  <!-- Magenta.js UMD builds (provide global mm) -->
-  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@2.1.5/dist/magenta.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@2.1.5/dist/music_rnn.js"></script>
-
-  <!-- Meyda Library -->
+  <!-- Libraries -->
   <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
-
-  <!-- Game Script -->
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@2.1.6/es6/core.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@2.1.6/es6/music_rnn.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
