@@ -25,12 +25,13 @@ const playBtn = document.createElement("button");
 playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas.nextSibling);
 const songUpload = document.getElementById("songUpload");
-const audioElement = new Audio("song.mp3");
+const audioElement = new Audio();
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
+let lastNoteTime = 0;
 
 // --- Player key input ---
 const keys = {};
@@ -44,7 +45,7 @@ aiModel.add(tf.layers.dense({ units: 32, activation: "relu" }));
 aiModel.add(tf.layers.dense({ units: 4, activation: "sigmoid" }));
 aiModel.compile({ optimizer: "adam", loss: "meanSquaredError" });
 
-// --- AI helper functions ---
+// --- AI helpers ---
 function getAIInput() {
   const input = new Array(16).fill(0); // 4 lanes × 4 upcoming notes
   notes.forEach(note => {
@@ -59,6 +60,7 @@ function getAIInput() {
 
 async function aiStep() {
   if (notes.length === 0) return;
+
   const state = getAIInput();
   const pred = aiModel.predict(state).dataSync();
   const action = pred.map(v => v > 0.5 ? 1 : 0);
@@ -68,7 +70,7 @@ async function aiStep() {
     if (press) pressKey(lanes[i]);
   });
 
-  // Reward = 1 for hitting a note, 0 for miss
+  // Reward = 1 if hitting any note
   let reward = 0;
   notes.forEach(note => {
     if (!note.hit && Math.abs(note.y - hitY) < hitWindow) {
@@ -91,7 +93,6 @@ async function aiStep() {
   drawAIVisualization();
 }
 
-// --- Press key helper ---
 function pressKey(key) {
   notes.forEach(note => {
     if (note.lane === lanes.indexOf(key) && !note.hit && Math.abs(note.y - hitY) < hitWindow) {
@@ -102,7 +103,6 @@ function pressKey(key) {
   });
 }
 
-// --- Draw AI visualization ---
 function drawAIVisualization() {
   aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
   aiHistory.forEach((val, i) => {
@@ -110,6 +110,35 @@ function drawAIVisualization() {
     aiCtx.fillStyle = "#08f";
     aiCtx.fillRect(i, aiCanvas.height - h, 1, h);
   });
+}
+
+// --- Pretrain AI on current notes ---
+async function pretrainAI() {
+  if (notes.length === 0) return;
+
+  const xs = [];
+  const ys = [];
+
+  notes.forEach(note => {
+    const input = new Array(16).fill(0);
+    const laneIndex = note.lane;
+    const posIndex = Math.floor((note.y - (hitY - 200)) / 50);
+    if (posIndex < 4) input[laneIndex * 4 + posIndex] = 1;
+    xs.push(input);
+
+    const output = [0, 0, 0, 0];
+    output[laneIndex] = 1;
+    ys.push(output);
+  });
+
+  const xsTensor = tf.tensor2d(xs);
+  const ysTensor = tf.tensor2d(ys);
+
+  await aiModel.fit(xsTensor, ysTensor, { epochs: 50 });
+
+  xsTensor.dispose();
+  ysTensor.dispose();
+  console.log("AI pretrained!");
 }
 
 // --- File upload ---
@@ -124,6 +153,9 @@ songUpload.addEventListener("change", (e) => {
 playBtn.addEventListener("click", async () => {
   resetGame();
   playBtn.textContent = "Loading...";
+  playBtn.disabled = true;
+
+  await pretrainAI();
 
   try {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -131,8 +163,6 @@ playBtn.addEventListener("click", async () => {
 
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
-
-    let lastNoteTime = 0;
 
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
@@ -165,6 +195,7 @@ playBtn.addEventListener("click", async () => {
   } catch (err) {
     console.error(err);
     playBtn.textContent = "▶️ Try Again";
+    playBtn.disabled = false;
   }
 });
 
