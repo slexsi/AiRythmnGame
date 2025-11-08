@@ -8,7 +8,7 @@ const laneWidth = canvas.width / lanes.length;
 let notes = [];
 let score = 0;
 
-let audioContext, sourceNode, analyzer;
+let audioContext, sourceNode;
 const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
@@ -24,31 +24,24 @@ playBtn.addEventListener("click", async () => {
   audioElement.load(); // force audio load
 
   audioElement.addEventListener("canplaythrough", () => {
-    console.log("Audio ready, starting analyzer...");
+    console.log("Audio ready, starting game...");
     try {
       sourceNode = audioContext.createMediaElementSource(audioElement);
       sourceNode.connect(audioContext.destination);
 
-      analyzer = Meyda.createMeydaAnalyzer({
-        audioContext,
-        source: sourceNode,
-        bufferSize: 1024,
-        featureExtractors: ["spectralFlux"],
-        callback: (features) => {
-          if (features && features.spectralFlux > 0.02) {
-            const laneIndex = Math.floor(Math.random() * lanes.length);
-            notes.push({ lane: laneIndex, y: 0 });
-          }
-        },
-      });
-
-      analyzer.start();
       audioElement.play();
       gameLoop();
       playBtn.textContent = "Playing...";
       playBtn.style.opacity = "0.5";
+
+      // ✅ Auto-spawn notes every 0.5 seconds for testing
+      setInterval(() => {
+        const laneIndex = Math.floor(Math.random() * lanes.length);
+        notes.push({ lane: laneIndex, y: 0 });
+      }, 500);
+
     } catch (err) {
-      console.error("Analyzer setup failed:", err);
+      console.error("Audio setup failed:", err);
     }
   });
 
