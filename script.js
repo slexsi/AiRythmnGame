@@ -46,7 +46,10 @@ let rnnSequence = []; // store generated notes
 
 async function loadRNN() {
   loadingStatus.textContent = "Loading RNN model...";
-  rnnModel = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/drum_kit_rnn');
+  // Replace this URL with your GitHub raw .mag file link
+  rnnModel = new mm.MusicRNN(
+    'https://raw.githubusercontent.com/your-username/your-repo/main/checkpoints/drum_kit_rnn.mag'
+  );
   try {
     await rnnModel.initialize();
     rnnLoaded = true;
@@ -114,7 +117,7 @@ playBtn.addEventListener("click", async () => {
             const rnnOut = await rnnModel.continueSequence(seed, 1, 1.0);
             const newNote = rnnOut.notes[0];
             if (newNote) {
-              const laneIndex = Math.floor(Math.random() * lanes.length); // map pitch to lane if desired
+              const laneIndex = Math.floor(Math.random() * lanes.length);
               notes.push({ lane: laneIndex, y: 0, hit: false });
               rnnSequence.push(newNote);
               noteSpawned = true;
@@ -125,7 +128,7 @@ playBtn.addEventListener("click", async () => {
         }
 
         // --- AI visualization ---
-        aiHistory.push(rms); // visualize RMS
+        aiHistory.push(rms); // can still visualize RMS
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
         drawAIVisualization(noteSpawned);
       }
@@ -150,17 +153,14 @@ window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // draw lanes
   lanes.forEach((key, i) => {
     ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  // draw hit line
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // draw notes
   notes.forEach((n) => {
     n.y += 5;
     ctx.fillStyle = "red";
@@ -187,7 +187,6 @@ function drawAIVisualization(noteSpawned) {
     aiCtx.fillStyle = "#08f";
     aiCtx.fillRect(i, aiCanvas.height - h, 1, h);
 
-    // mark when note spawned
     if (noteSpawned) {
       aiCtx.fillStyle = "#0f8";
       aiCtx.fillRect(i, 0, 1, aiCanvas.height);
