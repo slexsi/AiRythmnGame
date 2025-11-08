@@ -1,49 +1,33 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const nnCanvas = document.getElementById("nnCanvas");
-const nnCtx = nnCanvas.getContext("2d");
 const scoreEl = document.getElementById("score");
-const loadingStatus = document.getElementById("loadingStatus");
-
+const playBtn = document.getElementById("playBtn");
+const songUpload = document.getElementById("songUpload");
 const lanes = ["a", "s", "k", "l"];
 const laneWidth = canvas.width / lanes.length;
 const hitY = canvas.height - 60;
 const hitWindow = 40;
+
 let notes = [];
 let score = 0;
-let aiHistory = [];
-
-const playBtn = document.createElement("button");
-playBtn.textContent = "▶️ Play Song";
-document.body.insertBefore(playBtn, canvas.nextSibling);
-
-const songUpload = document.getElementById("songUpload");
-
-const audioElement = new Audio("song.mp3");
-audioElement.crossOrigin = "anonymous";
-
-let audioContext, sourceNode, analyzer;
+let keys = {};
 let rmsHistory = [];
 const historyLength = 1024 * 30;
+let lastNoteTime = 0;
 
-// --- Magenta RNN ---
-let rnnLoaded = false;
-let rnnModel;
-let rnnSequence = [];
+// --- Audio & Analyzer ---
+let audioElement = new Audio();
+audioElement.crossOrigin = "anonymous";
+let audioContext, sourceNode, analyzer;
+
+// --- Magenta RNN Model ---
+let nnModel;
+const MODEL_URL = "model.mag"; // your hosted .mag file
 
 async function loadRNN() {
-  try {
-    rnnModel = new mm.MusicRNN(
-      'https://raw.githubusercontent.com/slexsi/AiRythmnGame/main/drum_kit_rnn.mag'
-    );
-    await rnnModel.initialize();
-    rnnLoaded = true;
-    loadingStatus.textContent = "RNN Model Ready!";
-    console.log("RNN model loaded!");
-  } catch (err) {
-    console.error("Failed to load RNN:", err);
-    loadingStatus.textContent = "Failed to load RNN model";
-  }
+  nnModel = new music_rnn.MusicRNN(MODEL_URL);
+  await nnModel.initialize();
+  console.log("Magenta model loaded!");
 }
 loadRNN();
 
@@ -57,95 +41,75 @@ songUpload.addEventListener("change", (e) => {
 
 // --- Play button ---
 playBtn.addEventListener("click", async () => {
-  if (!rnnLoaded) {
-    alert("RNN model is still loading...");
-    return;
-  }
-
   resetGame();
-  playBtn.textContent = "Loading Audio...";
+  playBtn.disabled = true;
+  playBtn.textContent = "Loading...";
 
-  try {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await audioContext.resume();
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  await audioContext.resume();
 
-    sourceNode = audioContext.createMediaElementSource(audioElement);
-    sourceNode.connect(audioContext.destination);
+  sourceNode = audioContext.createMediaElementSource(audioElement);
+  sourceNode.connect(audioContext.destination);
 
-    let lastNoteTime = 0;
+  analyzer = Meyda.createMeydaAnalyzer({
+    audioContext,
+    source: sourceNode,
+    bufferSize: 1024,
+    featureExtractors: ["rms"],
+    callback: async (features) => {
+      if (!features || !nnModel) return;
 
-    analyzer = Meyda.createMeydaAnalyzer({
-      audioContext,
-      source: sourceNode,
-      bufferSize: 1024,
-      featureExtractors: ["rms"],
-      callback: async (features) => {
-        if (!features) return;
-        const rms = features.rms;
-        const now = audioContext.currentTime;
+      const rms = features.rms;
+      const now = audioContext.currentTime;
 
-        // Store RMS
-        rmsHistory.push(rms);
-        if (rmsHistory.length > historyLength) rmsHistory.shift();
+      // Store RMS
+      rmsHistory.push(rms);
+      if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // RNN decision
-        let noteSpawned = false;
-        if (now - lastNoteTime > 0.2) {
+      // --- Magenta prediction (async) ---
+      try {
+        const seed = { notes: [{ pitch: 60, startTime: 0, endTime: 0.1 }], totalTime: 0.1 };
+        const r = await nnModel.continueSequence(seed, 1, 1.0);
+        const beatProb = r.notes.length > 0 ? 1 : 0;
+
+        if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
-
-          const seed = rnnSequence.length > 0
-            ? [rnnSequence[rnnSequence.length - 1]]
-            : [{quantizedStartStep: 0, pitch: 36, duration: 1}];
-
-          try {
-            const rnnOut = await rnnModel.continueSequence(seed, 1, 1.0);
-            const newNote = rnnOut.notes[0];
-            if (newNote) {
-              const laneIndex = Math.floor(Math.random() * lanes.length);
-              notes.push({ lane: laneIndex, y: 0, hit: false });
-              rnnSequence.push(newNote);
-              noteSpawned = true;
-            }
-          } catch(err) {
-            console.error("RNN generation failed:", err);
-          }
+          const laneIndex = Math.floor(Math.random() * lanes.length);
+          notes.push({ lane: laneIndex, y: 0, hit: false });
         }
 
-        // AI visualization
-        aiHistory.push(rms);
-        if (aiHistory.length > nnCanvas.width) aiHistory.shift();
-        drawAIVisualization(noteSpawned);
+      } catch (err) {
+        console.warn("Prediction error:", err);
       }
-    });
+    }
+  });
 
-    analyzer.start();
-    await audioElement.play();
-    playBtn.textContent = "Playing...";
-    gameLoop();
-  } catch (err) {
-    console.error(err);
-    playBtn.textContent = "▶️ Try Again";
-  }
+  analyzer.start();
+  await audioElement.play();
+  playBtn.textContent = "Playing...";
+  gameLoop();
 });
 
 // --- Key input ---
-const keys = {};
-window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
-window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+window.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
+window.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
 
-// --- Game loop ---
+// --- Game Loop ---
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // Draw lanes
   lanes.forEach((key, i) => {
     ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
+  // Hit line
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  notes.forEach(n => {
+  // Draw notes
+  notes.forEach((n) => {
     n.y += 5;
     ctx.fillStyle = "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
@@ -162,20 +126,6 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-// --- AI Visualization ---
-function drawAIVisualization(noteSpawned) {
-  nnCtx.clearRect(0, 0, nnCanvas.width, nnCanvas.height);
-  aiHistory.forEach((val, i) => {
-    const h = val * nnCanvas.height;
-    nnCtx.fillStyle = "#08f";
-    nnCtx.fillRect(i, nnCanvas.height - h, 1, h);
-    if (noteSpawned) {
-      nnCtx.fillStyle = "#0f8";
-      nnCtx.fillRect(i, 0, 1, nnCanvas.height);
-    }
-  });
-}
-
 // --- Reset ---
 function resetGame() {
   if (analyzer) analyzer.stop();
@@ -184,8 +134,7 @@ function resetGame() {
   notes = [];
   score = 0;
   rmsHistory = [];
-  aiHistory = [];
-  rnnSequence = [];
+  lastNoteTime = 0;
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
