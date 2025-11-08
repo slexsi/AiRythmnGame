@@ -27,18 +27,26 @@ playBtn.addEventListener("click", async () => {
     sourceNode.connect(audioContext.destination);
 
     // Meyda analyzer
+    let lastBeat = 0; // to space them out
+    
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
       source: sourceNode,
       bufferSize: 1024,
-      featureExtractors: ["rms"], // simpler feature, works everywhere
+      featureExtractors: ["rms"],
       callback: (features) => {
         if (features && features.rms > 0.05) {
-          notes.push({ x: Math.random() * (canvas.width - 30), y: 0 });
-          console.log("Beat:", features.rms.toFixed(3));
+          const now = audioContext.currentTime;
+          // only drop a note every 0.3s max
+          if (now - lastBeat > 0.3) {
+            lastBeat = now;
+            notes.push({ x: Math.random() * (canvas.width - 30), y: 0 });
+            console.log("Beat:", features.rms.toFixed(3));
+          }
         }
       },
     });
+
 
     analyzer.start();
 
